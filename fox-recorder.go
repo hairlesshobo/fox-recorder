@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/hairlesshobo/fox-recorder/display"
 	"github.com/xthexder/go-jack"
 )
 
@@ -15,7 +16,13 @@ type channel struct {
 	inputName string
 }
 
-var channels = 32
+type displayObj struct {
+	tui *display.Tui
+}
+
+var displayHandle displayObj
+
+var channels = 1
 
 var portsIn []*jack.Port
 
@@ -25,12 +32,14 @@ func ampToDb(amplitude float64) float64 {
 
 func process(nframes uint32) int {
 	// loop through the input channels
-	for _, in := range portsIn {
+	levels := make([]*display.SignalLevel, channels)
+
+	for channel, in := range portsIn {
 
 		// get the incoming audio samples
 		samplesIn := in.GetBuffer(nframes)
 
-		sigLevel := -128.0
+		sigLevel := -150.0
 
 		for frame := range nframes {
 			sample := (float64)(samplesIn[frame])
@@ -41,25 +50,36 @@ func process(nframes uint32) int {
 			}
 		}
 
-		fmt.Printf("level: %1.0f\n", sigLevel)
+		levels[channel] = &display.SignalLevel{
+			Instant: int(sigLevel),
+		}
 	}
+
+	displayHandle.tui.UpdateSignalLevels(levels)
 
 	return 0
 }
 
 func main() {
-	testCview()
+	displayHandle.tui = display.NewTui(channels)
 
-	return
+	// this blocks because the tui has to be interactive
+	ready := make(chan bool)
+	go displayHandle.tui.Initalize(ready)
+
+	<-ready
+	displayHandle.tui.Start()
+
 	// connect to jack
 	client, status := jack.ClientOpen(jackClientName, jack.NoStartServer)
 
 	if status != 0 {
-		fmt.Println("Status:", jack.StrError(status))
+		displayHandle.tui.WriteLog(fmt.Sprintf("Status: %s", jack.StrError(status)))
 		return
 	}
 	// close jack connection on termination
 	defer client.Close()
+	displayHandle.tui.WriteLog("JACK server connected")
 
 	// register input ports
 	for i := 0; i < channels; i++ {
@@ -73,27 +93,29 @@ func main() {
 
 	// set process callback
 	if code := client.SetProcessCallback(process); code != 0 {
-		fmt.Println("Failed to set process callback:", jack.StrError(code))
+		displayHandle.tui.WriteLog(fmt.Sprintf("Failed to set process callback: %s", jack.StrError(code)))
 		return
 	}
 	shutdown := make(chan struct{})
 
 	// set shutdown handler
 	client.OnShutdown(func() {
-		fmt.Println("Shutting down")
+		displayHandle.tui.WriteLog("JACK connection shutting down")
 		close(shutdown)
 	})
 
 	// activate client
 	if code := client.Activate(); code != 0 {
-		fmt.Println("Failed to activate client:", jack.StrError(code))
+		displayHandle.tui.WriteLog(fmt.Sprintf("Failed to activate client: %s", jack.StrError(code)))
 		return
 	}
 
 	client.Connect("system:capture_1", fmt.Sprintf("%s:in_0", jackClientName))
 
+	displayHandle.tui.WriteLog("Input ports connected")
+
 	// TODO: connect port(s)
 
-	fmt.Println(client.GetName())
+	// this blocks until the jack connection shuts down
 	<-shutdown
 }
