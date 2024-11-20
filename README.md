@@ -1,8 +1,9 @@
-# FoxRecorder
+# Fox Audio
 
 ## About
 
-FoxRecorder is a simple CLI utility for recording multitrack audio straight to disk as either WAV or (eventually) BWF format files. It requires that the [JACK audio server](http://jackaudio.org/) be installed and running when executed.
+Fox Audio is a simple CLI utility for recording and playback multitrack audio straight 
+to disk as either WAV or (eventually) RF64 format files. It requires that the [JACK audio server](http://jackaudio.org/) be installed and running when executed.
 
 ## Purpose
 
@@ -14,7 +15,7 @@ I frequently run live production and need a simple way to record multi track aud
 
 ## License
 
-FoxRecorder is licensed under the Apache-2.0 license
+Fox Audio is licensed under the Apache-2.0 license
 
 Copyright (c) 2024 Steve Cross <flip@foxhollow.cc>
 
