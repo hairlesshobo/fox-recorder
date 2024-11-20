@@ -24,6 +24,7 @@ package custom
 
 import (
 	"fmt"
+	"math"
 	// "math"
 	"slices"
 	"sort"
@@ -172,6 +173,10 @@ func (p *LevelMeter) SetLevel(level int) {
 		p.level = p.maxLevel
 	}
 
+	if p.level > p.longTermMaxLevel {
+		p.longTermMaxLevel = p.level
+	}
+
 	if p.level > p.peakLevel || (time.Now().UnixMilli()-p.lastPeakTime) > int64(p.peakHoldTimeMs) {
 		p.peakLevel = p.level
 		p.lastPeakTime = time.Now().UnixMilli()
@@ -220,13 +225,13 @@ func (p *LevelMeter) Draw(screen tcell.Screen) {
 	x, y, meterWidth, _ := p.GetInnerRect()
 	foundPeak := false
 
-	if len(p.channelNumber) > 0 {
-		fmtString := fmt.Sprintf("%%%dv", meterWidth)
-		runeArray := []rune(fmt.Sprintf(fmtString, p.channelNumber))
-		for w := 0; w < meterWidth; w++ {
-			screen.SetContent(x+w, y, runeArray[w], nil, tcell.StyleDefault.Bold(true))
-		}
+	// if len(p.channelNumber) > 0 {
+	fmtString := fmt.Sprintf("%%%dv", meterWidth)
+	runeArray := []rune(fmt.Sprintf(fmtString, p.channelNumber))
+	for w := 0; w < meterWidth; w++ {
+		screen.SetContent(x+w, y, runeArray[w], nil, tcell.StyleDefault.Bold(true).Background(p.GetBackgroundColor()))
 	}
+	// }
 
 	y += 1
 
@@ -257,9 +262,10 @@ func (p *LevelMeter) Draw(screen tcell.Screen) {
 
 	// show max value
 	// maxValue := int(math.Abs(float64(p.longTermMaxLevel)))
-	fmtString := fmt.Sprintf("%%%dv", meterWidth)
-	runeArray := []rune(fmt.Sprintf(fmtString, p.longTermMaxLevel))
+	fmtString = fmt.Sprintf("%%%dv", meterWidth)
+	runeArray = []rune(fmt.Sprintf(fmtString, math.Abs(float64(p.longTermMaxLevel))))
+	longTermMaxColor := getLevelColor(p.colorMap, p.longTermMaxLevel)
 	for w := 0; w < meterWidth; w++ {
-		screen.SetContent(x+w, y, runeArray[w], nil, tcell.StyleDefault.Bold(true))
+		screen.SetContent(x+w, y, runeArray[w], nil, tcell.StyleDefault.Bold(true).Foreground(longTermMaxColor).Background(p.GetBackgroundColor()))
 	}
 }

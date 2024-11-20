@@ -35,7 +35,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-var meterWidth = 5
+var meterWidth = 4
 
 // var channels = 32
 var meterSteps = []int{
@@ -137,22 +137,6 @@ func (tui *Tui) Initalize(ready chan bool) {
 
 		levelsGrid.AddItem(tui.meters[i], 0, i+1, 1, 1, 0, 0, false)
 	}
-
-	// go func() {
-	// 	t := time.NewTicker(100 * time.Millisecond)
-	// 	for range t.C {
-	// 		for i := range tui.channelCount {
-	// 			newLevel := rand.IntN(24) * (-1)
-	// 			meters[i].SetLevel(newLevel)
-	// 			if newLevel > meters[i].GetLongTermMaxLevel() {
-	// 				meters[i].SetLongTermMaxLevel(newLevel)
-	// 			}
-	// 		}
-
-	// 		// Queue draw
-	// 		app.QueueUpdateDraw(func() {})
-	// 	}
-	// }()
 
 	ready <- true
 
