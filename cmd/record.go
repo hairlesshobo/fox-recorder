@@ -121,10 +121,7 @@ func Main() {
 	displayHandle.tui = display.NewTui(channels)
 
 	// this blocks because the tui has to be interactive
-	ready := make(chan bool)
-	go displayHandle.tui.Initalize(ready)
-
-	<-ready
+	displayHandle.tui.Initalize()
 	displayHandle.tui.Start()
 
 	// connect to jack
@@ -153,12 +150,12 @@ func Main() {
 		displayHandle.tui.WriteLog(fmt.Sprintf("Failed to set process callback: %s", jack.StrError(code)))
 		return
 	}
-	shutdown := make(chan struct{})
+	jackShutdown := make(chan struct{})
 
 	// set shutdown handler
 	client.OnShutdown(func() {
 		displayHandle.tui.WriteLog("JACK connection shutting down")
-		close(shutdown)
+		close(jackShutdown)
 	})
 
 	// activate client
@@ -174,5 +171,6 @@ func Main() {
 	// TODO: connect port(s)
 
 	// this blocks until the jack connection shuts down
-	<-shutdown
+	<-jackShutdown
+	displayHandle.tui.WaitForShutdown()
 }

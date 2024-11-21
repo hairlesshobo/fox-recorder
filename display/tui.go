@@ -24,8 +24,6 @@ package display
 
 import (
 	"fmt"
-	// "math/rand/v2"
-	// "strings"
 	"time"
 
 	"fox-audio/custom"
@@ -35,43 +33,72 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-var meterWidth = 4
+var (
+	meterWidth = 4
+	// channels   = 32
+	meterSteps = []int{
+		0, -1, -2, -3, -4, -6, -8,
+		-10, -12, -15, -18, -21, -24, -27,
+		-30, -36, -42, -48, -54, -60}
 
-// var channels = 32
-var meterSteps = []int{
-	0, -1, -2, -3, -4, -6, -8,
-	-10, -12, -15, -18, -21, -24, -27,
-	-30, -36, -42, -48, -54, -60}
-
-var levelColors = map[int]tcell.Color{
-	-1:   tcell.ColorDarkRed,
-	-6:   tcell.Color130,
-	-18:  tcell.ColorGreen,
-	-150: tcell.Color120,
-}
+	levelColors = map[int]tcell.Color{
+		-1:   tcell.ColorDarkRed,
+		-6:   tcell.Color130,
+		-18:  tcell.ColorGreen,
+		-150: tcell.Color120,
+	}
+)
 
 type Tui struct {
 	// statusUpdateChannel chan int
-	channelCount        int
-	app                 *cview.Application
-	signalUpdateChannel chan []*shared.SignalLevel
-	shutdownChannel     chan bool
-	statusView          *cview.TextView
-	logView             *cview.TextView
-	meters              []*custom.LevelMeter
+	channelCount    int
+	app             *cview.Application
+	shutdownChannel chan bool
+
+	sessionName           string
+	profileName           string
+	jackServerStatus      int // 0 = not running, 1 = running, 2 = running with warnings, 3 = terminated
+	transportStatus       string
+	bitDepth              int
+	sampleRate            int
+	armedChannelCount     int
+	connectedChannelCount int
+	diskTotal             int64
+	diskUsed              int64
+	diskRremainingTime    int64
+	recordingDuration     int64
+	bufferUsagePct        float64
+	diskPerformancePct    float64
+
+	meters            []*custom.LevelMeter
+	tvLogs            *cview.TextView
+	tvTransportStatus *cview.TextView
+	tvPosition        *cview.TextView
 }
 
 func NewTui(channels int) *Tui {
 	tui := &Tui{
-		channelCount:        channels,
-		shutdownChannel:     make(chan bool),
-		signalUpdateChannel: make(chan []*shared.SignalLevel),
+		channelCount:    channels,
+		shutdownChannel: make(chan bool, 1),
 	}
 
 	return tui
 }
 
-func (tui *Tui) Initalize(ready chan bool) {
+func (tui *Tui) addStatusTextField(grid *cview.Grid, row int, name string, initialValue string) *cview.TextView {
+	header := cview.NewTextView()
+	header.SetTextAlign(cview.AlignRight)
+	header.Write([]byte(fmt.Sprintf("%s: ", name)))
+	grid.AddItem(header, row, 0, 1, 1, 0, 0, false)
+
+	valueTextView := cview.NewTextView()
+	valueTextView.Write([]byte(initialValue))
+	grid.AddItem(valueTextView, row, 1, 1, 1, 0, 0, false)
+
+	return valueTextView
+}
+
+func (tui *Tui) Initalize() {
 	tui.app = cview.NewApplication()
 	defer tui.app.HandlePanic()
 
@@ -79,16 +106,22 @@ func (tui *Tui) Initalize(ready chan bool) {
 
 	grid := cview.NewGrid()
 	grid.SetPadding(0, 0, 0, 0)
-	grid.SetColumns(-1)
+	grid.SetColumns(-1, 30)
 	grid.SetRows(10, meterRowHeight, -1)
 	grid.SetBackgroundColor(cview.Styles.PrimitiveBackgroundColor)
 
-	tui.statusView = cview.NewTextView()
-	tui.statusView.SetBorder(true)
-	tui.statusView.SetPadding(0, 0, 0, 0)
-	tui.statusView.Write([]byte("Status    : Recording\n"))
-	tui.statusView.Write([]byte("Elapsed   : 00:00:00.000\n"))
-	grid.AddItem(tui.statusView, 0, 0, 1, 1, 0, 0, false)
+	statusGrid := cview.NewGrid()
+	statusGrid.SetBorder(true)
+	statusGrid.SetPadding(0, 0, 1, 1)
+	statusGrid.SetColumns(12, -1, -1)
+	statusGrid.SetRows(1, 1, 1, 1, 1, 1, -1)
+	statusGrid.SetBackgroundColor(cview.Styles.PrimitiveBackgroundColor)
+
+	// todo put this in struct
+	tui.tvTransportStatus = tui.addStatusTextField(statusGrid, 0, "Status", "Recording")
+	tui.tvPosition = tui.addStatusTextField(statusGrid, 1, "Position", "00:00:00.000")
+
+	grid.AddItem(statusGrid, 0, 0, 1, 1, 0, 0, false)
 
 	levelColumns := make([]int, tui.channelCount+2)
 	levelColumns[0] = 5
@@ -106,10 +139,9 @@ func (tui *Tui) Initalize(ready chan bool) {
 	levelsGrid.SetRows(0)
 	grid.AddItem(levelsGrid, 1, 0, 1, 1, 0, 0, false)
 
-	tui.logView = cview.NewTextView()
-	tui.logView.SetPadding(0, 0, 0, 0)
-	tui.logView.SetText("this is the logs view\n")
-	grid.AddItem(tui.logView, 2, 0, 1, 1, 0, 0, false)
+	tui.tvLogs = cview.NewTextView()
+	tui.tvLogs.SetPadding(0, 0, 0, 0)
+	grid.AddItem(tui.tvLogs, 2, 0, 1, 1, 0, 0, false)
 
 	tui.meters = make([]*custom.LevelMeter, tui.channelCount)
 
@@ -131,6 +163,7 @@ func (tui *Tui) Initalize(ready chan bool) {
 		tui.meters[i].SetMinLevel(-150)
 		tui.meters[i].SetLevel(-99)
 		tui.meters[i].SetChannelNumber(fmt.Sprintf("%d", i+1))
+
 		if i%2 == 1 {
 			tui.meters[i].SetBackgroundColor(tcell.Color233)
 		}
@@ -138,49 +171,60 @@ func (tui *Tui) Initalize(ready chan bool) {
 		levelsGrid.AddItem(tui.meters[i], 0, i+1, 1, 1, 0, 0, false)
 	}
 
-	ready <- true
+	// ready <- true
 
 	tui.app.SetRoot(grid, true)
-	if err := tui.app.Run(); err != nil {
-		panic(err)
-	}
 }
 
 func (tui *Tui) WriteLog(message string) {
-	tui.logView.Write([]byte(fmt.Sprintf("[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), message)))
+	tui.tvLogs.Write([]byte(fmt.Sprintf("[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), message)))
 }
 
 func (tui *Tui) excecuteLoop() {
+	defer tui.app.HandlePanic()
+
 	tui.WriteLog(("TUI loop started"))
-out:
+
 	for {
-		select {
-		// check for shutdown signal
-		case shutdown := <-tui.shutdownChannel:
-			if shutdown {
-				tui.WriteLog("TUI shutting down")
-				tui.app.QueueUpdateDraw(func() {})
-				break out
-			}
-		case levels := <-tui.signalUpdateChannel:
-			for i := range levels {
-				level := levels[i]
-				tui.meters[i].SetLevel(level.Instant)
-			}
-		default:
-			// continue processing here
-			// // Queue draw
+		if len(tui.shutdownChannel) > 0 {
+			tui.WriteLog("TUI shutting down")
+			tui.app.QueueUpdateDraw(func() {})
+			break
 		}
 
 		tui.app.QueueUpdateDraw(func() {})
 		time.Sleep(25 * time.Millisecond)
 	}
+
+	fmt.Println("shutting down tui")
 }
 
 func (tui *Tui) Start() {
+	go func() {
+		defer tui.app.HandlePanic()
+
+		if err := tui.app.Run(); err != nil {
+			panic(err)
+		}
+
+		fmt.Println("requested exit")
+		tui.shutdownChannel <- true
+	}()
+
 	go tui.excecuteLoop()
 }
 
 func (tui *Tui) UpdateSignalLevels(levels []*shared.SignalLevel) {
-	tui.signalUpdateChannel <- levels
+	for i := range levels {
+		level := levels[i]
+		tui.meters[i].SetLevel(level.Instant)
+	}
+}
+
+func (tui *Tui) IsShutdown() bool {
+	return len(tui.shutdownChannel) > 0
+}
+
+func (tui *Tui) WaitForShutdown() {
+	<-tui.shutdownChannel
 }
