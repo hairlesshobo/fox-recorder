@@ -25,6 +25,7 @@ package custom
 import (
 	"fmt"
 	"math"
+
 	// "math"
 	"slices"
 	"sort"
@@ -80,9 +81,9 @@ type LevelMeter struct {
 func NewLevelMeter(meterSteps []int, colorMap map[int]tcell.Color) *LevelMeter {
 	p := &LevelMeter{
 		Box:              cview.NewBox(),
-		emptyRune:        tcell.RuneBlock,
+		emptyRune:        rune(9617), // tcell.RuneBlock,
 		emptyColor:       cview.Styles.PrimitiveBackgroundColor,
-		filledRune:       tcell.RuneBlock,
+		filledRune:       rune(9607), //tcell.RuneBlock,
 		maxLevel:         slices.Max(meterSteps),
 		minLevel:         slices.Min(meterSteps),
 		peakHoldTimeMs:   750,
@@ -254,6 +255,10 @@ func (p *LevelMeter) Draw(screen tcell.Screen) {
 		if doDraw {
 			for w := 0; w < meterWidth; w++ {
 				screen.SetContent(x+w, y+(step), p.filledRune, nil, style)
+			}
+		} else {
+			for w := 0; w < meterWidth; w++ {
+				screen.SetContent(x+w, y+(step), p.emptyRune, nil, style.Dim(true))
 			}
 		}
 	}

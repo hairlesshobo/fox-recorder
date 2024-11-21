@@ -56,6 +56,14 @@ func init() {
 }
 
 func testUi(channels int, freezeMeters bool) {
+
+	// for i := 9150; i < 9300; i++ {
+	// 	fmt.Printf("%03d %s\n", i, string(rune(i)))
+	// }
+
+	// fmt.Println('⏸')
+
+	// return
 	displayHandle.tui = display.NewTui(channels)
 
 	// this blocks because the tui has to be interactive
@@ -70,8 +78,14 @@ func testUi(channels int, freezeMeters bool) {
 		t := time.NewTicker(100 * time.Millisecond)
 		levels := make([]*shared.SignalLevel, channels)
 
+		displayHandle.tui.SetTransportStatus(2)
+		displayHandle.tui.SetAudioFormat("24 bit / 48k WAV")
+
+		size := uint64(0)
 	out:
 		for range t.C {
+			size += uint64(rand.IntN(5) * 1024 * 32)
+
 			if displayHandle.tui.IsShutdown() {
 				break out
 			}
@@ -86,6 +100,7 @@ func testUi(channels int, freezeMeters bool) {
 
 			// Queue draw
 			displayHandle.tui.UpdateSignalLevels(levels)
+			displayHandle.tui.SetSessionSize(size)
 
 			if freezeMeters {
 				break
