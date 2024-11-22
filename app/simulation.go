@@ -20,19 +20,51 @@
 //			limitations under the License.
 //
 // =================================================================================
-package shared
+package app
 
 import (
-	"os"
-	"os/signal"
+	"fox-audio/model"
+	"fox-audio/reaper"
+	"math/rand/v2"
+	"time"
 )
 
-func CatchSigint(callback func()) {
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
+func startSimulation(freezeMeters bool, channelCount int) {
 	go func() {
-		for range c {
-			callback()
+		reaper.Register()
+		t := time.NewTicker(150 * time.Millisecond)
+		levels := make([]*model.SignalLevel, channelCount)
+
+		displayHandle.tui.SetTransportStatus(2)
+		displayHandle.tui.SetAudioFormat("24 bit / 48k WAV")
+
+		size := uint64(0)
+
+		for range t.C {
+			// TODO: have the random meters fall off more gradually to seem more realistic
+			size += uint64(rand.IntN(5) * 1024 * 32)
+
+			if reaper.Reaped() {
+				break
+			}
+
+			for channel := range channelCount {
+				newLevel := (rand.IntN(70) + 0) * (-1)
+
+				levels[channel] = &model.SignalLevel{
+					Instant: int(newLevel),
+				}
+			}
+
+			// Queue draw
+			displayHandle.tui.UpdateSignalLevels(levels)
+			displayHandle.tui.SetSessionSize(size)
+
+			if freezeMeters {
+				break
+			}
 		}
+
+		reaper.Done()
 	}()
 }

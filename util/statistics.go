@@ -20,19 +20,28 @@
 //			limitations under the License.
 //
 // =================================================================================
-package shared
+package util
 
-import (
-	"os"
-	"os/signal"
-)
+import "math"
 
-func CatchSigint(callback func()) {
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	go func() {
-		for range c {
-			callback()
+func GetChanAverage(inputChan chan int64) float64 {
+	sum := 0.0
+	count := 0
+
+out:
+	for {
+		select {
+		case value := <-inputChan:
+			sum += float64(value)
+			count++
+		default:
+			break out
 		}
-	}()
+	}
+
+	return sum / float64(count)
+}
+
+func AmplitudeToDb(amplitude float64) float64 {
+	return math.Log10(amplitude) * 20.0
 }

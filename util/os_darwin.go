@@ -1,3 +1,5 @@
+//go:build darwin
+
 // =================================================================================
 //
 //			fox-audio - https://www.foxhollow.cc/projects/fox-audio/
@@ -20,19 +22,27 @@
 //			limitations under the License.
 //
 // =================================================================================
-package shared
+package util
 
 import (
-	"os"
-	"os/signal"
+	"fox-audio/model"
+	"syscall"
 )
 
-func CatchSigint(callback func()) {
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	go func() {
-		for range c {
-			callback()
-		}
-	}()
+// TODO: make this linux happy
+func GetDiskSpace(path string) model.DiskInfo {
+	stat := syscall.Statfs_t{}
+
+	// TODO: error handling
+	syscall.Statfs(path, &stat)
+
+	diskInfo := model.DiskInfo{
+		Size: uint64(stat.Bsize) * stat.Blocks,
+		Free: uint64(stat.Bsize) * stat.Bavail,
+	}
+
+	diskInfo.Used = diskInfo.Size - diskInfo.Free
+	diskInfo.UsedPct = float64(diskInfo.Used) / float64(diskInfo.Size)
+
+	return diskInfo
 }

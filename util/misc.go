@@ -20,19 +20,14 @@
 //			limitations under the License.
 //
 // =================================================================================
-package shared
+package util
 
-import (
-	"os"
-	"os/signal"
-)
+import "fmt"
 
-func CatchSigint(callback func()) {
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	go func() {
-		for range c {
-			callback()
-		}
-	}()
+func DumpRunes(start int, count int) {
+	// 9150
+	// 9300
+	for i := start; i < start+count; i++ {
+		fmt.Printf("%03d %s\n", i, string(rune(i)))
+	}
 }

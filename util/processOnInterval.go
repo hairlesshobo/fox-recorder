@@ -20,19 +20,29 @@
 //			limitations under the License.
 //
 // =================================================================================
-package shared
+package util
 
 import (
-	"os"
-	"os/signal"
+	"fox-audio/reaper"
+	"time"
 )
 
-func CatchSigint(callback func()) {
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
+func ProcessOnInterval(milliseconds int, process func()) {
 	go func() {
-		for range c {
-			callback()
+		reaper.Register()
+
+		process()
+
+		t := time.NewTicker(time.Duration(milliseconds) * time.Millisecond)
+
+		for range t.C {
+			if reaper.Reaped() {
+				break
+			}
+
+			process()
 		}
+
+		reaper.Done()
 	}()
 }

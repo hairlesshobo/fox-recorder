@@ -23,9 +23,9 @@
 package main
 
 import (
-	"fox-audio/cmd"
+	"fox-audio/app"
 )
 
 func main() {
-	cmd.Execute()
+	app.Execute()
 }
