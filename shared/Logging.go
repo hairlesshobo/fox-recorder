@@ -23,9 +23,10 @@
 package shared
 
 import (
+	"bufio"
 	"fmt"
+	"log/slog"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -74,15 +75,18 @@ func HijackLogging() {
 	}
 	go logProcessor(stdout_r, INFO, cancelChan)
 
-	// stderr_r, stderr_w, err := os.Pipe()
-	// if err != nil {
-	// 	fmt.Fprintln(stockStderr, err)
-	// }
-	// go logProcessor(stderr_r, ERROR, cancelChan)
+	stderr_r, stderr_w, err := os.Pipe()
+	if err != nil {
+		fmt.Fprintln(stockStderr, err)
+	}
+	go logProcessor(stderr_r, ERROR, cancelChan)
 
-	// TODO: should be routing all output to slog
 	os.Stdout = stdout_w
-	// os.Stderr = stderr_w
+	os.Stderr = stderr_w
+}
+
+func EnableSlogLogging() {
+	AddLogSink(slogLogger)
 }
 
 func EnableStderrLogging() {
@@ -102,34 +106,35 @@ func stderrLogger(level LogLevel, message string) {
 	fmt.Fprintf(stockStdout, "[%s] [%s] %s\n", dtm, level.String(), message)
 }
 
+func slogLogger(level LogLevel, message string) {
+	if level == ERROR {
+		slog.Error(message)
+	} else if level == WARN {
+		slog.Warn(message)
+	} else if level == INFO {
+		slog.Info(message)
+	} else if level == DEBUG {
+		slog.Debug(message)
+	}
+}
+
 func logProcessor(pipe *os.File, level LogLevel, cancelChan chan bool) {
-	buffer := make([]byte, 1024)
+	scanner := bufio.NewScanner(pipe)
 
 out:
-	for {
+	for scanner.Scan() {
+		line := scanner.Text()
+		// for {
 		select {
 		case doCancel := <-cancelChan:
 			if doCancel {
 				break out
 			}
 
-			n, err := pipe.Read(buffer)
-			if err != nil {
-				fmt.Fprintf(stockStderr, "Error reading from pipe: %s\n", err)
-			}
-
-			message := strings.TrimSuffix(string(buffer[:n]), "\n")
-
 			for _, logger := range logSinks {
-				logger(level, message)
+				// logger(level, message)
+				logger(level, line)
 			}
 		}
-
-		// data, err := ioutil.ReadFile(filePath)
-		// if err != nil {
-		// 	fmt.Printf("Error reading file %s: %s\n", filePath, err)
-		// 	return
-		// }
-
 	}
 }

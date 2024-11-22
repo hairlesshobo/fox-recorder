@@ -24,6 +24,7 @@ package display
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 
 	"fox-audio/custom"
@@ -56,7 +57,7 @@ var (
 	// channels   = 32
 	meterSteps = []int{
 		0, -1, -2, -3, -4, -6, -8,
-		-10, -12, -15, -18, -21, -24, -27,
+		// -10, -12, -15, -18, -21, -24, -27,
 		-30, -36, -42, -48, -54, -60}
 
 	levelColors = map[int]tcell.Color{
@@ -75,7 +76,7 @@ var (
 
 type Tui struct {
 	// statusUpdateChannel chan int
-	channelCount    int
+	// channelCount    int
 	app             *cview.Application
 	shutdownChannel chan bool
 
@@ -94,7 +95,10 @@ type Tui struct {
 	bufferUsagePct        float64
 	diskPerformancePct    float64
 
-	meters            []*custom.LevelMeter
+	appGrid    *cview.Grid
+	meters     []*custom.LevelMeter
+	metersGrid *cview.Grid
+
 	tvLogs            *cview.TextView
 	tvTransportStatus *custom.StatusText
 	tvPosition        *custom.StatusText
@@ -106,9 +110,9 @@ type Tui struct {
 	meterBuffer    *custom.StatusMeter
 }
 
-func NewTui(channels int) *Tui {
+func NewTui() *Tui {
 	tui := &Tui{
-		channelCount:    channels,
+		// channelCount:    0,
 		shutdownChannel: make(chan bool, 1),
 	}
 
@@ -121,11 +125,11 @@ func (tui *Tui) Initalize() {
 
 	meterRowHeight := len(meterSteps) + 2
 
-	grid := cview.NewGrid()
-	grid.SetPadding(0, 0, 0, 0)
-	grid.SetColumns(-1, 30)
-	grid.SetRows(10, meterRowHeight, -1)
-	grid.SetBackgroundColor(cview.Styles.PrimitiveBackgroundColor)
+	tui.appGrid = cview.NewGrid()
+	tui.appGrid.SetPadding(0, 0, 0, 0)
+	tui.appGrid.SetColumns(-1, 60)
+	tui.appGrid.SetRows(10, meterRowHeight, -1)
+	tui.appGrid.SetBackgroundColor(cview.Styles.PrimitiveBackgroundColor)
 
 	statusGrid := cview.NewGrid()
 	statusGrid.SetBorder(true)
@@ -156,64 +160,25 @@ func (tui *Tui) Initalize() {
 	meterColOffset := 1
 	statusGrid.AddItem(tui.meterDiskSpace.GetGrid(), 0, meterColOffset, 1, 1, 0, 0, false)
 	statusGrid.AddItem(tui.meterBuffer.GetGrid(), 1, meterColOffset, 1, 1, 0, 0, false)
+	tui.appGrid.AddItem(statusGrid, 0, 0, 1, 1, 0, 0, false)
 
-	grid.AddItem(statusGrid, 0, 0, 1, 1, 0, 0, false)
-
-	levelColumns := make([]int, tui.channelCount+2)
-	levelColumns[0] = 5
-	for i := range tui.channelCount {
-		levelColumns[i+1] = meterWidth
-	}
-	levelColumns[tui.channelCount+1] = -1
-
-	levelsGrid := cview.NewGrid()
-	levelsGrid.SetBorder(false)
-	levelsGrid.SetBorders(false)
-	levelsGrid.SetPadding(0, 0, 0, 0)
-	levelsGrid.SetColumns(levelColumns...)
-	grid.AddItem(levelsGrid, 1, 0, 1, 1, 0, 0, false)
+	tui.metersGrid = cview.NewGrid()
+	tui.metersGrid.SetBorder(false)
+	tui.metersGrid.SetBorders(false)
+	tui.metersGrid.SetPadding(0, 0, 0, 0)
+	tui.metersGrid.SetColumns(-1)
+	tui.appGrid.AddItem(tui.metersGrid, 1, 0, 1, 1, 0, 0, false)
 
 	tui.tvLogs = cview.NewTextView()
 	tui.tvLogs.SetPadding(0, 0, 0, 0)
-	grid.AddItem(tui.tvLogs, 2, 0, 1, 1, 0, 0, false)
+	tui.appGrid.AddItem(tui.tvLogs, 2, 0, 1, 1, 0, 0, false)
 
-	tui.meters = make([]*custom.LevelMeter, tui.channelCount)
-
-	meterStepLabel := cview.NewTextView()
-	meterStepLabel.SetPadding(0, 0, 0, 0)
-
-	// meterStepLabels := make([]string, len(meterSteps))
-	meterStepLabel.Write([]byte(fmt.Sprintln()))
-	for step := 0; step < len(meterSteps); step++ {
-		meterStepLabel.Write([]byte(fmt.Sprintf("%3v\n", fmt.Sprintf("%d", meterSteps[step]))))
-		// meterStepLabels = append(meterStepLabels, fmt.Sprintf("%3v", fmt.Sprintf("%d", meterSteps[step])))
-	}
-	levelsGrid.AddItem(meterStepLabel, 0, 0, 1, 1, 0, 0, false)
-
-	for i := range tui.channelCount {
-		tui.meters[i] = custom.NewLevelMeter(meterSteps, levelColors)
-		tui.meters[i].SetBorder(false)
-		tui.meters[i].SetPadding(0, 0, 1, 1)
-		tui.meters[i].SetMinLevel(-150)
-		tui.meters[i].SetLevel(-99)
-		tui.meters[i].SetChannelNumber(fmt.Sprintf("%d", i+1))
-
-		if (i >= 8 && i <= 16) || (i >= 19 && i <= 27) {
-			tui.meters[i].ArmChannel(true)
-		}
-
-		if i%2 == 1 {
-			tui.meters[i].SetBackgroundColor(meterAlternateBackground)
-		}
-
-		levelsGrid.AddItem(tui.meters[i], 0, i+1, 1, 1, 0, 0, false)
-	}
-
-	// ready <- true
-
-	tui.app.SetRoot(grid, true)
+	tui.app.SetRoot(tui.appGrid, true)
 }
 
+// WriteLog should not be used
+//
+// Deprecated: help me find references to remove
 func (tui *Tui) WriteLog(message string) {
 	tui.tvLogs.Write([]byte(fmt.Sprintf("[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), message)))
 }
@@ -221,11 +186,11 @@ func (tui *Tui) WriteLog(message string) {
 func (tui *Tui) excecuteLoop() {
 	defer tui.app.HandlePanic()
 
-	tui.WriteLog(("TUI loop started"))
+	slog.Info("TUI loop started")
 
 	for {
 		if len(tui.shutdownChannel) > 0 {
-			tui.WriteLog("TUI shutting down")
+			slog.Info("TUI shutting down")
 			tui.app.QueueUpdateDraw(func() {})
 			break
 		}
@@ -237,9 +202,71 @@ func (tui *Tui) excecuteLoop() {
 	fmt.Println("shutting down tui")
 }
 
+func (tui *Tui) SetChannelCount(channelCount int) {
+	levelColumns := make([]int, channelCount+2)
+	levelColumns[0] = 5
+	for i := range channelCount {
+		levelColumns[i+1] = meterWidth
+	}
+	levelColumns[channelCount+1] = -1
+
+	tui.metersGrid.SetColumns(levelColumns...)
+
+	tui.meters = make([]*custom.LevelMeter, channelCount)
+
+	meterStepLabel := cview.NewTextView()
+	meterStepLabel.SetPadding(0, 0, 0, 0)
+
+	// meterStepLabels := make([]string, len(meterSteps))
+	meterStepLabel.Write([]byte(fmt.Sprintln()))
+	for step := 0; step < len(meterSteps); step++ {
+		meterStepLabel.Write([]byte(fmt.Sprintf("%3v\n", fmt.Sprintf("%d", meterSteps[step]))))
+		// meterStepLabels = append(meterStepLabels, fmt.Sprintf("%3v", fmt.Sprintf("%d", meterSteps[step])))
+	}
+	tui.metersGrid.AddItem(meterStepLabel, 0, 0, 1, 1, 0, 0, false)
+
+	for i := range channelCount {
+		tui.meters[i] = custom.NewLevelMeter(meterSteps, levelColors)
+		tui.meters[i].SetBorder(false)
+		tui.meters[i].SetPadding(0, 0, 1, 1)
+		tui.meters[i].SetMinLevel(-150)
+		tui.meters[i].SetLevel(-99)
+		tui.meters[i].SetChannelNumber(fmt.Sprintf("%d", i+1))
+		tui.meters[i].ArmChannel(true)
+
+		// TODO: this needs to be controlled externally
+
+		// if (i >= 8 && i <= 16) || (i >= 19 && i <= 27) {
+		// 	tui.meters[i].ArmChannel(true)
+		// }
+
+		if i%2 == 1 {
+			tui.meters[i].SetBackgroundColor(meterAlternateBackground)
+		}
+
+		tui.metersGrid.AddItem(tui.meters[i], 0, i+1, 1, 1, 0, 0, false)
+	}
+
+}
+
 func (tui *Tui) Start() {
 	go func() {
 		defer tui.app.HandlePanic()
+
+		// Capture user input
+		tui.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+			// TODO: make sure this works
+			// Anything handled here will be executed on the main thread
+			switch event.Key() {
+			case tcell.KeyEsc:
+			case tcell.KeyCtrlC:
+				// Exit the application
+				tui.app.Stop()
+				return nil
+			}
+
+			return event
+		})
 
 		if err := tui.app.Run(); err != nil {
 			panic(err)
@@ -286,6 +313,10 @@ func (tui *Tui) SetTransportStatus(status int) {
 		icon = runeRecord
 		color = tcell.ColorRed
 		tui.transportStatus = "Recording"
+	} else if status == 3 {
+		icon = runeClock
+		color = tcell.ColorYellow
+		tui.transportStatus = "Starting Audio Server"
 	}
 
 	tui.tvTransportStatus.SetCurrentValue(string(icon) + " " + tui.transportStatus)

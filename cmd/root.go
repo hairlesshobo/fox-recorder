@@ -24,16 +24,16 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"math"
 	"math/rand/v2"
 	"os"
 	"time"
 
+	"fox-audio/audio"
 	"fox-audio/display"
 	"fox-audio/model"
 	"fox-audio/shared"
-
-	"github.com/hairlesshobo/go-jack"
 
 	"github.com/spf13/cobra"
 )
@@ -45,18 +45,13 @@ type displayObj struct {
 }
 
 var (
+	// arguments
 	argSimulate             bool
 	argSimulateChannelCount int
 	argSimulateFreezeMeters bool
 
 	displayHandle displayObj
-	channels      = 1
-	portsIn       []*jack.Port
-
-	// importArgIndividual bool
-	// importArgDryRun     bool
-	// importArgServer     string
-	// importArgDump       bool
+	ports         []*audio.Port
 
 	rootCmd = &cobra.Command{
 		Use:   "record",
@@ -99,14 +94,35 @@ func ampToDb(amplitude float64) float64 {
 	return math.Log10(amplitude) * 20.0
 }
 
-func process(nframes uint32) int {
-	// loop through the input channels
-	levels := make([]*model.SignalLevel, channels)
+func jackError(message string) {
+	slog.Error("JACK: " + message)
+}
 
-	for channel, in := range portsIn {
+func jackInfo(message string) {
+	slog.Info("JACK: " + message)
+}
+
+func jackShutdown(jackShutdown chan struct{}) {
+	slog.Info("JACK connection shutting down")
+	close(jackShutdown)
+}
+
+func jackXrun() int {
+	slog.Error("xrun")
+
+	return 0
+}
+
+func jackProcess(nframes uint32) int {
+	// loop through the input channels
+	levels := make([]*model.SignalLevel, len(ports))
+
+	for portNum, port := range ports {
 
 		// get the incoming audio samples
-		samplesIn := in.GetBuffer(nframes)
+		samplesIn := port.GetJackPort().GetBuffer(nframes)
+
+		// slog.Info(fmt.Sprintf("%v", samplesIn))
 
 		sigLevel := -150.0
 
@@ -119,7 +135,7 @@ func process(nframes uint32) int {
 			}
 		}
 
-		levels[channel] = &model.SignalLevel{
+		levels[portNum] = &model.SignalLevel{
 			Instant: int(sigLevel),
 		}
 	}
@@ -130,87 +146,72 @@ func process(nframes uint32) int {
 }
 
 func run(simulate bool, simulateFreezeMeters bool, simulateChannelCount int) {
-	shared.HijackLogging()
-	shared.EnableStderrLogging()
-
-	// fmt.Println("test?")
-	// fmt.Println("test?")
-	// fmt.Println("test?")
-
-	// time.Sleep(3 * time.Second)
-
-	// return
-
-	if simulate {
-		channels = simulateChannelCount
-	}
-
-	displayHandle.tui = display.NewTui(channels)
-
-	// this blocks because the tui has to be interactive
+	displayHandle.tui = display.NewTui()
 	displayHandle.tui.Initalize()
+	displayHandle.tui.SetTransportStatus(3)
 	displayHandle.tui.Start()
 
-	var jackClient *jack.Client
-	var jackStatus int
-	var jackShutdown chan struct{}
+	handler := shared.NewTuiLogHandler(displayHandle.tui, slog.LevelDebug)
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+
+	shared.HijackLogging()
+	shared.EnableSlogLogging()
+
+	jackShuttingDown := make(chan struct{})
+	var audioServer *audio.JackServer
 
 	if !simulate {
-		// connect to jack
-		jackClient, jackStatus = jack.ClientOpen(jackClientName, jack.NoStartServer)
+		audioServer = audio.NewServer(jackClientName, "coreaudio/", 44100, 4096)
+		audioServer.SetErrorCallback(jackError)
+		audioServer.SetInfoCallback(jackInfo)
 
-		if jackStatus != 0 {
-			displayHandle.tui.WriteLog(fmt.Sprintf("Status: %s", jack.StrError(jackStatus)))
-			return
-		}
-		defer jackClient.Close()
-
-		// close jack connection on termination
-		displayHandle.tui.WriteLog("JACK server connected")
-
-		// register input ports
-		for i := 0; i < channels; i++ {
-			portIn := jackClient.PortRegister(fmt.Sprintf("in_%d", i), jack.DEFAULT_AUDIO_TYPE, jack.PortIsInput, 0)
-			portsIn = append(portsIn, portIn)
-		}
-
-		// TODO: get frame time
-		// TODO: get sample rate
-		// TODO: set error handler
-
-		// set process callback
-		if code := jackClient.SetProcessCallback(process); code != 0 {
-			displayHandle.tui.WriteLog(fmt.Sprintf("Failed to set process callback: %s", jack.StrError(code)))
-			return
-		}
-		jackShutdown = make(chan struct{})
-
-		// set shutdown handler
-		jackClient.OnShutdown(func() {
-			displayHandle.tui.WriteLog("JACK connection shutting down")
-			close(jackShutdown)
+		shared.CatchSigint(func() {
+			fmt.Println("I don't wanna!")
+			audioServer.StopServer()
+			os.Exit(0)
 		})
 
-		// activate client
-		if code := jackClient.Activate(); code != 0 {
-			displayHandle.tui.WriteLog(fmt.Sprintf("Failed to activate client: %s", jack.StrError(code)))
-			return
-		}
+		audioServer.StartServer()
 
-		jackClient.Connect("system:capture_1", fmt.Sprintf("%s:in_0", jackClientName))
+		displayHandle.tui.SetChannelCount(len(audioServer.GetInputPorts()))
+		displayHandle.tui.SetTransportStatus(0)
+
+		audioServer.Connect()
+
+		// only register input ports, for now
+		audioServer.RegisterPorts(true, false)
+		ports = audioServer.GetInputPorts()
+
+		// // TODO: get frame time
+		// // TODO: get sample rate
+		// // TODO: set error handler
+
+		// set process callback
+		audioServer.SetProcessCallback(jackProcess)
+
+		// set shutdown handler
+		audioServer.SetXrunCallback(jackXrun)
+		audioServer.SetShutdownCallback(func() { jackShutdown(jackShuttingDown) })
+
+		audioServer.ActivateClient()
+
+		audioServer.ConnectPorts(true, false)
+
+		slog.Info("Input ports connected")
 	}
-
-	displayHandle.tui.WriteLog("Input ports connected")
 
 	// TODO: connect port(s)
 
 	// this blocks until the jack connection shuts down
 	if !simulate {
-		<-jackShutdown
+		<-jackShuttingDown
 	} else {
-		startSimulation(simulateFreezeMeters)
+		displayHandle.tui.SetChannelCount(simulateChannelCount)
+		startSimulation(simulateFreezeMeters, simulateChannelCount)
 	}
 	displayHandle.tui.WaitForShutdown()
+	audioServer.StopServer()
 }
 
 func DumpRunes(start int, count int) {
@@ -221,10 +222,10 @@ func DumpRunes(start int, count int) {
 	}
 }
 
-func startSimulation(freezeMeters bool) {
+func startSimulation(freezeMeters bool, channelCount int) {
 	go func() {
 		t := time.NewTicker(150 * time.Millisecond)
-		levels := make([]*model.SignalLevel, channels)
+		levels := make([]*model.SignalLevel, channelCount)
 
 		displayHandle.tui.SetTransportStatus(2)
 		displayHandle.tui.SetAudioFormat("24 bit / 48k WAV")
@@ -239,7 +240,7 @@ func startSimulation(freezeMeters bool) {
 				break
 			}
 
-			for channel := range channels {
+			for channel := range channelCount {
 				newLevel := (rand.IntN(70) + 0) * (-1)
 
 				levels[channel] = &model.SignalLevel{
