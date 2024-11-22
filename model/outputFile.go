@@ -20,9 +20,13 @@
 //			limitations under the License.
 //
 // =================================================================================
-package shared
+package model
 
-type StatusUpdate struct {
-	Time   int64
-	Status string
+type OutputFile struct {
+	FileName      string
+	InputChannels []*InputChannel
+}
+
+func (file *OutputFile) GetChannelCount() int32 {
+	return int32(len(file.InputChannels))
 }

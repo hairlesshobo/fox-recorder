@@ -20,13 +20,10 @@
 //			limitations under the License.
 //
 // =================================================================================
-package shared
+package model
 
-type OutputFile struct {
-	FileName      string
-	InputChannels []*InputChannel
-}
-
-func (file *OutputFile) GetChannelCount() int32 {
-	return int32(len(file.InputChannels))
+type SignalLevel struct {
+	Instant int
+	Max     int
+	Peak    int
 }

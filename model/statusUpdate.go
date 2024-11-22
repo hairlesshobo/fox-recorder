@@ -20,9 +20,9 @@
 //			limitations under the License.
 //
 // =================================================================================
-package shared
+package model
 
-type InputChannel struct {
-	Number     int
-	SourceName string
+type StatusUpdate struct {
+	Time   int64
+	Status string
 }

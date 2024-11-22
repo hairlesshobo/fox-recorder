@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"fox-audio/custom"
-	"fox-audio/shared"
+	"fox-audio/model"
 
 	"code.rocketnine.space/tslocum/cview"
 	"github.com/gdamore/tcell/v2"
@@ -251,7 +251,7 @@ func (tui *Tui) Start() {
 	go tui.excecuteLoop()
 }
 
-func (tui *Tui) UpdateSignalLevels(levels []*shared.SignalLevel) {
+func (tui *Tui) UpdateSignalLevels(levels []*model.SignalLevel) {
 	for i := range levels {
 		level := levels[i]
 		tui.meters[i].SetLevel(level.Instant)

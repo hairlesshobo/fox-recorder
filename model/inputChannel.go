@@ -20,10 +20,9 @@
 //			limitations under the License.
 //
 // =================================================================================
-package shared
+package model
 
-type SignalLevel struct {
-	Instant int
-	Max     int
-	Peak    int
+type InputChannel struct {
+	Number     int
+	SourceName string
 }
