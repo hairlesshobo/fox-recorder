@@ -28,11 +28,13 @@ import (
 	"math"
 	"math/rand/v2"
 	"os"
+	"syscall"
 	"time"
 
 	"fox-audio/audio"
 	"fox-audio/display"
 	"fox-audio/model"
+	"fox-audio/reaper"
 	"fox-audio/shared"
 
 	"github.com/spf13/cobra"
@@ -52,6 +54,7 @@ var (
 
 	displayHandle displayObj
 	ports         []*audio.Port
+	stats         statistics
 
 	rootCmd = &cobra.Command{
 		Use:   "record",
@@ -102,9 +105,9 @@ func jackInfo(message string) {
 	slog.Info("JACK: " + message)
 }
 
-func jackShutdown(jackShutdown chan struct{}) {
+func jackShutdown(server *audio.JackServer) {
 	slog.Info("JACK connection shutting down")
-	close(jackShutdown)
+	server.StopServer()
 }
 
 func jackXrun() int {
@@ -113,7 +116,99 @@ func jackXrun() int {
 	return 0
 }
 
+type statistics struct {
+	lastStartTime      int64
+	lastEndTime        int64
+	processElapsedChan chan int64
+	processIdleChan    chan int64
+}
+
+func getChanAverage(inputChan chan int64) float64 {
+	sum := 0.0
+	count := 0
+
+out:
+	for {
+		select {
+		case value := <-inputChan:
+			sum += float64(value)
+			count++
+		default:
+			break out
+		}
+	}
+
+	return sum / float64(count)
+}
+
+func processOnInterval(milliseconds int, process func()) {
+	go func() {
+		reaper.Register()
+
+		process()
+
+		t := time.NewTicker(time.Duration(milliseconds) * time.Millisecond)
+
+		for range t.C {
+			if reaper.Reaped() {
+				break
+			}
+
+			process()
+		}
+
+		reaper.Done()
+	}()
+}
+
+func initStatistics() {
+	stats = statistics{
+		processElapsedChan: make(chan int64, 30),
+		processIdleChan:    make(chan int64, 30),
+	}
+
+	// audio engine load calculations
+	processOnInterval(250, func() {
+		idleTimeAvg := getChanAverage(stats.processIdleChan)
+		processTimeAvg := getChanAverage(stats.processElapsedChan)
+		avgAudioLoad := processTimeAvg / idleTimeAvg
+
+		displayHandle.tui.SetAudioLoad(int(avgAudioLoad * 100.0))
+		slog.Info(fmt.Sprintf("Idle time: %0.0f us, Process time: %0.0f us, load %0.3f%%", idleTimeAvg, processTimeAvg, avgAudioLoad))
+	})
+
+	// disk space utilization
+	processOnInterval(1000, func() {
+		// TODO: this should point to recording directory
+		wd, _ := os.Getwd()
+
+		stat := syscall.Statfs_t{}
+		syscall.Statfs(wd, &stat)
+
+		// TODO: make this linux happy
+		// TODO: Verify mac accuracy
+		diskSize := uint64(stat.Bsize) * (stat.Blocks) // - stat.Bfree - stat.Bavail)
+		diskFree := uint64(stat.Bsize) * stat.Bavail
+		diskUsed := diskSize - diskFree
+
+		// Available blocks * size per block = available space in bytes
+		diskUsedPct := float64(diskUsed) / float64(diskSize)
+		displayHandle.tui.SetDiskUsage(int(math.Round(diskUsedPct * 100.0)))
+
+		slog.Info(fmt.Sprintf("Disk total: %d B, Disk Used: %d B, Disk free: %d B, used %0.2f%%", diskSize, diskUsed, diskFree, diskUsedPct))
+	})
+}
+
 func jackProcess(nframes uint32) int {
+	// audio load statistics
+	if stats.lastEndTime > 0 {
+		if len(stats.processIdleChan) < cap(stats.processIdleChan) {
+			stats.processIdleChan <- time.Now().UnixMicro() - stats.lastEndTime
+		}
+	}
+
+	stats.lastStartTime = time.Now().UnixMicro()
+
 	// loop through the input channels
 	levels := make([]*model.SignalLevel, len(ports))
 
@@ -121,8 +216,6 @@ func jackProcess(nframes uint32) int {
 
 		// get the incoming audio samples
 		samplesIn := port.GetJackPort().GetBuffer(nframes)
-
-		// slog.Info(fmt.Sprintf("%v", samplesIn))
 
 		sigLevel := -150.0
 
@@ -142,6 +235,12 @@ func jackProcess(nframes uint32) int {
 
 	displayHandle.tui.UpdateSignalLevels(levels)
 
+	// audio load statistics
+	stats.lastEndTime = time.Now().UnixMicro()
+	if len(stats.processElapsedChan) < cap(stats.processElapsedChan) {
+		stats.processElapsedChan <- stats.lastEndTime - stats.lastStartTime
+
+	}
 	return 0
 }
 
@@ -151,18 +250,28 @@ func run(simulate bool, simulateFreezeMeters bool, simulateChannelCount int) {
 	displayHandle.tui.SetTransportStatus(3)
 	displayHandle.tui.Start()
 
-	handler := shared.NewTuiLogHandler(displayHandle.tui, slog.LevelDebug)
+	initStatistics()
+
+	// handler := shared.NewTuiLogHandler(displayHandle.tui, slog.LevelDebug)
+	f, err := os.Create("/Users/flip/projects/personal/fox-recorder/fox.log")
+
+	if err != nil {
+		panic(err)
+	}
+
+	handler := slog.NewTextHandler(f, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	})
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
 
 	shared.HijackLogging()
 	shared.EnableSlogLogging()
 
-	jackShuttingDown := make(chan struct{})
 	var audioServer *audio.JackServer
 
 	if !simulate {
-		audioServer = audio.NewServer(jackClientName, "coreaudio/", 44100, 4096)
+		audioServer = audio.NewServer(jackClientName, "coreaudio/", 44100, 2048)
 		audioServer.SetErrorCallback(jackError)
 		audioServer.SetInfoCallback(jackInfo)
 
@@ -173,11 +282,13 @@ func run(simulate bool, simulateFreezeMeters bool, simulateChannelCount int) {
 		})
 
 		audioServer.StartServer()
+		reaper.Callback(audioServer.StopServer)
 
 		displayHandle.tui.SetChannelCount(len(audioServer.GetInputPorts()))
 		displayHandle.tui.SetTransportStatus(0)
 
 		audioServer.Connect()
+		reaper.Callback(audioServer.Disconnect)
 
 		// only register input ports, for now
 		audioServer.RegisterPorts(true, false)
@@ -192,7 +303,7 @@ func run(simulate bool, simulateFreezeMeters bool, simulateChannelCount int) {
 
 		// set shutdown handler
 		audioServer.SetXrunCallback(jackXrun)
-		audioServer.SetShutdownCallback(func() { jackShutdown(jackShuttingDown) })
+		audioServer.SetShutdownCallback(func() { jackShutdown(audioServer) })
 
 		audioServer.ActivateClient()
 
@@ -204,14 +315,13 @@ func run(simulate bool, simulateFreezeMeters bool, simulateChannelCount int) {
 	// TODO: connect port(s)
 
 	// this blocks until the jack connection shuts down
-	if !simulate {
-		<-jackShuttingDown
-	} else {
+	if simulate {
 		displayHandle.tui.SetChannelCount(simulateChannelCount)
 		startSimulation(simulateFreezeMeters, simulateChannelCount)
 	}
-	displayHandle.tui.WaitForShutdown()
-	audioServer.StopServer()
+	// displayHandle.tui.WaitForShutdown()
+	// audioServer.StopServer()
+	reaper.Wait()
 }
 
 func DumpRunes(start int, count int) {
@@ -224,6 +334,7 @@ func DumpRunes(start int, count int) {
 
 func startSimulation(freezeMeters bool, channelCount int) {
 	go func() {
+		reaper.Register()
 		t := time.NewTicker(150 * time.Millisecond)
 		levels := make([]*model.SignalLevel, channelCount)
 
@@ -236,7 +347,7 @@ func startSimulation(freezeMeters bool, channelCount int) {
 			// TODO: have the random meters fall off more gradually to seem more realistic
 			size += uint64(rand.IntN(5) * 1024 * 32)
 
-			if displayHandle.tui.IsShutdown() {
+			if reaper.Reaped() {
 				break
 			}
 
@@ -256,5 +367,7 @@ func startSimulation(freezeMeters bool, channelCount int) {
 				break
 			}
 		}
+
+		reaper.Done()
 	}()
 }

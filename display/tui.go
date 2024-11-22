@@ -29,6 +29,8 @@ import (
 
 	"fox-audio/custom"
 	"fox-audio/model"
+	"fox-audio/reaper"
+	"fox-audio/theme"
 
 	"code.rocketnine.space/tslocum/cview"
 	"github.com/gdamore/tcell/v2"
@@ -57,7 +59,7 @@ var (
 	// channels   = 32
 	meterSteps = []int{
 		0, -1, -2, -3, -4, -6, -8,
-		// -10, -12, -15, -18, -21, -24, -27,
+		-10, -12, -15, -18, -21, -24, -27,
 		-30, -36, -42, -48, -54, -60}
 
 	levelColors = map[int]tcell.Color{
@@ -66,11 +68,11 @@ var (
 		// -18:  tcell.ColorGreen, // 142? 65? muted 71?
 		// -150: tcell.Color72,    //tcell.Color120, 59? 60? 61? 66? 67? 68? 72?
 
-		0:    tcell.Color124, // 124?
-		-2:   tcell.Color131, // 124?
-		-6:   tcell.Color142, // 131?
-		-18:  tcell.Color71,  // 142? 65? muted 71?
-		-150: tcell.Color72,  //tcell.Color120, 59? 60? 61? 66? 67? 68? 72?
+		0:    theme.Red,       // 124?
+		-2:   theme.Pink,      // 124?
+		-6:   theme.Yellow,    // 131?
+		-18:  theme.Green,     // 142? 65? muted 71?
+		-150: theme.SoftGreen, //tcell.Color120, 59? 60? 61? 66? 67? 68? 72?
 	}
 )
 
@@ -80,20 +82,20 @@ type Tui struct {
 	app             *cview.Application
 	shutdownChannel chan bool
 
-	sessionName           string
-	profileName           string
-	jackServerStatus      int    // 0 = not running, 1 = running, 2 = running with warnings, 3 = terminated
-	transportStatus       string // 0 = pause, 1 = playing, 2 = recording
-	bitDepth              int
-	sampleRate            int
-	armedChannelCount     int
-	connectedChannelCount int
-	diskTotal             int64
-	diskUsed              int64
-	diskRremainingTime    int64
-	recordingDuration     int64
-	bufferUsagePct        float64
-	diskPerformancePct    float64
+	// sessionName           string
+	// profileName           string
+	// jackServerStatus      int    // 0 = not running, 1 = running, 2 = running with warnings, 3 = terminated
+	// transportStatus       string // 0 = pause, 1 = playing, 2 = recording
+	// bitDepth              int
+	// sampleRate            int
+	// armedChannelCount     int
+	// connectedChannelCount int
+	// diskTotal             int64
+	// diskUsed              int64
+	// diskRremainingTime    int64
+	// recordingDuration     int64
+	// bufferUsagePct        float64
+	// diskPerformancePct    float64
 
 	appGrid    *cview.Grid
 	meters     []*custom.LevelMeter
@@ -108,6 +110,7 @@ type Tui struct {
 
 	meterDiskSpace *custom.StatusMeter
 	meterBuffer    *custom.StatusMeter
+	meterAudioLoad *custom.StatusMeter
 }
 
 func NewTui() *Tui {
@@ -141,7 +144,7 @@ func (tui *Tui) Initalize() {
 	headerWidth := 16
 
 	tui.tvTransportStatus = custom.NewStatusTextField(headerWidth, "Status", string(runeRecord)+" Recording")
-	tui.tvTransportStatus.SetColor(tcell.ColorRed)
+	tui.tvTransportStatus.SetColor(theme.Red)
 	tui.tvPosition = custom.NewStatusTextField(headerWidth, "Position", "00:00:00.000")
 	tui.tvFormat = custom.NewStatusTextField(headerWidth, "Format", "Unknown")
 	tui.tvFileSize = custom.NewStatusTextField(headerWidth, "Session Size", "0 bytes")
@@ -154,12 +157,14 @@ func (tui *Tui) Initalize() {
 	statusGrid.AddItem(tui.tvFileSize.GetGrid(), 3, statusColOffset, 1, 1, 0, 0, false)
 	statusGrid.AddItem(tui.tvErrorCount.GetGrid(), 4, statusColOffset, 1, 1, 0, 0, false)
 
-	tui.meterDiskSpace = custom.NewStatusMeter(headerWidth, "Disk Space", 65, "%")
-	tui.meterBuffer = custom.NewStatusMeter(headerWidth, "Buffer", 18, "%")
+	tui.meterDiskSpace = custom.NewStatusMeter(headerWidth, "Disk Space", 0, "%")
+	tui.meterBuffer = custom.NewStatusMeter(headerWidth, "Buffer", 0, "%")
+	tui.meterAudioLoad = custom.NewStatusMeter(headerWidth, "Audio Load", 0, "%")
 
 	meterColOffset := 1
 	statusGrid.AddItem(tui.meterDiskSpace.GetGrid(), 0, meterColOffset, 1, 1, 0, 0, false)
 	statusGrid.AddItem(tui.meterBuffer.GetGrid(), 1, meterColOffset, 1, 1, 0, 0, false)
+	statusGrid.AddItem(tui.meterAudioLoad.GetGrid(), 2, meterColOffset, 1, 1, 0, 0, false)
 	tui.appGrid.AddItem(statusGrid, 0, 0, 1, 1, 0, 0, false)
 
 	tui.metersGrid = cview.NewGrid()
@@ -189,7 +194,7 @@ func (tui *Tui) excecuteLoop() {
 	slog.Info("TUI loop started")
 
 	for {
-		if len(tui.shutdownChannel) > 0 {
+		if len(tui.shutdownChannel) > 0 || reaper.Reaped() {
 			slog.Info("TUI shutting down")
 			tui.app.QueueUpdateDraw(func() {})
 			break
@@ -262,6 +267,7 @@ func (tui *Tui) Start() {
 			case tcell.KeyCtrlC:
 				// Exit the application
 				tui.app.Stop()
+				reaper.Reap()
 				return nil
 			}
 
@@ -278,57 +284,12 @@ func (tui *Tui) Start() {
 	go tui.excecuteLoop()
 }
 
-func (tui *Tui) UpdateSignalLevels(levels []*model.SignalLevel) {
-	for i := range levels {
-		level := levels[i]
-		tui.meters[i].SetLevel(level.Instant)
-	}
-}
-
 func (tui *Tui) IsShutdown() bool {
 	return len(tui.shutdownChannel) > 0
 }
 
 func (tui *Tui) WaitForShutdown() {
 	<-tui.shutdownChannel
-}
-
-func (tui *Tui) SetTransportStatus(status int) {
-	if status < 0 || status > 3 {
-		panic("invalid status value provided: " + string(status))
-	}
-
-	var icon rune
-	var color tcell.Color
-
-	if status == 0 {
-		icon = runePause
-		color = tcell.ColorBlue
-		tui.transportStatus = "Paused"
-	} else if status == 1 {
-		icon = runePlay
-		color = tcell.ColorGreen
-		tui.transportStatus = "Playing"
-	} else if status == 2 {
-		icon = runeRecord
-		color = tcell.ColorRed
-		tui.transportStatus = "Recording"
-	} else if status == 3 {
-		icon = runeClock
-		color = tcell.ColorYellow
-		tui.transportStatus = "Starting Audio Server"
-	}
-
-	tui.tvTransportStatus.SetCurrentValue(string(icon) + " " + tui.transportStatus)
-	tui.tvTransportStatus.SetColor(color)
-}
-
-func (tui *Tui) SetAudioFormat(format string) {
-	tui.tvFormat.SetCurrentValue(format)
-}
-
-func (tui *Tui) SetSessionSize(size uint64) {
-	tui.tvFileSize.SetCurrentValue(format_size(size))
 }
 
 func format_size(bytes uint64) string {
@@ -346,4 +307,78 @@ func format_size(bytes uint64) string {
 	}
 
 	return fmt.Sprintf("%.02f %s", bytesFloat, suffix[i])
+}
+
+//
+// status update functions
+//
+
+func (tui *Tui) SetTransportStatus(status int) {
+	if status < 0 || status > 3 {
+		panic("invalid status value provided: " + string(status))
+	}
+
+	var icon rune
+	var color tcell.Color
+	var transportStatus string
+
+	if status == 0 {
+		icon = runePause
+		color = theme.Blue
+		transportStatus = "Paused"
+	} else if status == 1 {
+		icon = runePlay
+		color = theme.Green
+		transportStatus = "Playing"
+	} else if status == 2 {
+		icon = runeRecord
+		color = theme.Red
+		transportStatus = "Recording"
+	} else if status == 3 {
+		icon = runeClock
+		color = theme.Yellow
+		transportStatus = "Starting Audio Server"
+	}
+
+	tui.tvTransportStatus.SetCurrentValue(string(icon) + " " + transportStatus)
+	tui.tvTransportStatus.SetColor(color)
+}
+
+func (tui *Tui) SetAudioFormat(format string) {
+	tui.tvFormat.SetCurrentValue(format)
+}
+
+func (tui *Tui) SetSessionSize(size uint64) {
+	tui.tvFileSize.SetCurrentValue(format_size(size))
+}
+
+func (tui *Tui) SetAudioLoad(percent int) {
+	tui.meterAudioLoad.SetCurrentValue(percent)
+
+	if percent <= 20 {
+		tui.meterAudioLoad.SetColor(theme.Green)
+	} else if percent <= 50 {
+		tui.meterAudioLoad.SetColor(theme.Yellow)
+	} else {
+		tui.meterAudioLoad.SetColor(theme.Red)
+	}
+}
+
+func (tui *Tui) UpdateSignalLevels(levels []*model.SignalLevel) {
+	for i := range levels {
+		level := levels[i]
+		tui.meters[i].SetLevel(level.Instant)
+	}
+}
+
+func (tui *Tui) SetDiskUsage(percent int) {
+	tui.meterDiskSpace.SetCurrentValue(percent)
+
+	if percent <= 20 {
+		tui.meterDiskSpace.SetColor(theme.Green)
+	} else if percent <= 50 {
+		tui.meterDiskSpace.SetColor(theme.Yellow)
+	} else {
+		tui.meterDiskSpace.SetColor(theme.Red)
+	}
 }

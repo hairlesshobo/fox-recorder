@@ -25,6 +25,7 @@ package audio
 import (
 	"bufio"
 	"fmt"
+	"fox-audio/reaper"
 	"log/slog"
 	"os/exec"
 	"strconv"
@@ -71,6 +72,8 @@ func (server *JackServer) StartServer() {
 	ready := make(chan bool)
 
 	go func() {
+		reaper.Register()
+
 		slog.Info("Starting JACK server...")
 		// /usr/local/bin/jackd -dcoreaudio -d'AppleUSBAudioEngine:BEHRINGER:X-USB:42D1635E:1,2' -r48000 -p4096 -C
 		server.cmd = exec.Command(
@@ -95,6 +98,7 @@ func (server *JackServer) StartServer() {
 
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
+			// not using reaper.Reaped() here because this should end on its own once the jack server is killed
 			line := scanner.Text()
 
 			slog.Debug(line)
@@ -120,6 +124,8 @@ func (server *JackServer) StartServer() {
 				ready <- true
 			}
 		}
+
+		reaper.Done()
 	}()
 
 	<-ready
@@ -127,9 +133,7 @@ func (server *JackServer) StartServer() {
 
 func (server *JackServer) StopServer() {
 	if server != nil {
-		if server.jackClient != nil {
-			server.jackClient.Close()
-		}
+		server.Disconnect()
 
 		// TODO: make sure process is running?
 		server.cmd.Process.Kill()
@@ -138,6 +142,7 @@ func (server *JackServer) StopServer() {
 }
 
 func (server *JackServer) Connect() {
+	reaper.Register()
 	slog.Info("Connecting to JACK server")
 
 	var jackStatus int
@@ -149,6 +154,20 @@ func (server *JackServer) Connect() {
 	}
 
 	slog.Info("JACK server connected")
+}
+
+func (server *JackServer) Disconnect() {
+	slog.Info("Disconnecting from JACK server")
+
+	jackStatus := server.jackClient.Close()
+
+	if jackStatus != 0 {
+		slog.Error(fmt.Sprintf("JACK Status: %s", jack.StrError(jackStatus)))
+		return
+	}
+
+	slog.Info("JACK server disconnected")
+	reaper.Done()
 }
 
 func (server *JackServer) GetAllPorts() []*Port {

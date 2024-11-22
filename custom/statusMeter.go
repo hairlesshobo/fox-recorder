@@ -91,6 +91,11 @@ func (meter *StatusMeter) SetCurrentValue(value int) {
 	}
 }
 
+func (meter *StatusMeter) SetColor(color tcell.Color) {
+	meter.meterView.SetFilledColor(color)
+	meter.valueView.SetTextColor(color)
+}
+
 func (meter *StatusMeter) GetGrid() *cview.Grid {
 	return meter.grid
 }
