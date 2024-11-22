@@ -42,14 +42,17 @@ const (
 	runeSkipBack    = rune(9198) // ⏮
 	runeSkipForward = rune(9197) // ⏭
 	runeClock       = rune(9201) // ⏱
-	// runePause       =
+
 	StatusPaused    = 0
 	StatusPlaying   = 1
 	StatusRecording = 2
+
+	meterAlternateBackground = tcell.Color233
+	meterWidth               = 4
 )
 
 var (
-	meterWidth = 4
+
 	// channels   = 32
 	meterSteps = []int{
 		0, -1, -2, -3, -4, -6, -8,
@@ -93,11 +96,14 @@ type Tui struct {
 
 	meters            []*custom.LevelMeter
 	tvLogs            *cview.TextView
-	tvTransportStatus *cview.TextView
-	tvPosition        *cview.TextView
-	tvFormat          *cview.TextView
-	tvFileSize        *cview.TextView
-	tvErrorCount      *cview.TextView
+	tvTransportStatus *custom.StatusText
+	tvPosition        *custom.StatusText
+	tvFormat          *custom.StatusText
+	tvFileSize        *custom.StatusText
+	tvErrorCount      *custom.StatusText
+
+	meterDiskSpace *custom.StatusMeter
+	meterBuffer    *custom.StatusMeter
 }
 
 func NewTui(channels int) *Tui {
@@ -109,24 +115,11 @@ func NewTui(channels int) *Tui {
 	return tui
 }
 
-func (tui *Tui) addStatusTextField(grid *cview.Grid, row int, name string, initialValue string) *cview.TextView {
-	header := cview.NewTextView()
-	header.SetTextAlign(cview.AlignRight)
-	header.Write([]byte(fmt.Sprintf("%s: ", name)))
-	grid.AddItem(header, row, 0, 1, 1, 0, 0, false)
-
-	valueTextView := cview.NewTextView()
-	valueTextView.Write([]byte(initialValue))
-	grid.AddItem(valueTextView, row, 1, 1, 1, 0, 0, false)
-
-	return valueTextView
-}
-
 func (tui *Tui) Initalize() {
 	tui.app = cview.NewApplication()
 	defer tui.app.HandlePanic()
 
-	meterRowHeight := len(meterSteps) + 3
+	meterRowHeight := len(meterSteps) + 2
 
 	grid := cview.NewGrid()
 	grid.SetPadding(0, 0, 0, 0)
@@ -137,17 +130,32 @@ func (tui *Tui) Initalize() {
 	statusGrid := cview.NewGrid()
 	statusGrid.SetBorder(true)
 	statusGrid.SetPadding(0, 0, 1, 1)
-	statusGrid.SetColumns(16, -1, -1)
+	statusGrid.SetColumns(51, 55, -1)
 	statusGrid.SetRows(1, 1, 1, 1, 1, 1, -1)
 	statusGrid.SetBackgroundColor(cview.Styles.PrimitiveBackgroundColor)
 
-	// todo put this in struct
-	tui.tvTransportStatus = tui.addStatusTextField(statusGrid, 0, "Status", string(runeRecord)+" Recording")
-	tui.tvTransportStatus.SetTextColor(tcell.ColorRed)
-	tui.tvPosition = tui.addStatusTextField(statusGrid, 1, "Position", "00:00:00.000")
-	tui.tvFormat = tui.addStatusTextField(statusGrid, 2, "Format", "Unknown")
-	tui.tvFileSize = tui.addStatusTextField(statusGrid, 3, "Session Size", "0 bytes")
-	tui.tvErrorCount = tui.addStatusTextField(statusGrid, 4, "Errors", "0")
+	headerWidth := 16
+
+	tui.tvTransportStatus = custom.NewStatusTextField(headerWidth, "Status", string(runeRecord)+" Recording")
+	tui.tvTransportStatus.SetColor(tcell.ColorRed)
+	tui.tvPosition = custom.NewStatusTextField(headerWidth, "Position", "00:00:00.000")
+	tui.tvFormat = custom.NewStatusTextField(headerWidth, "Format", "Unknown")
+	tui.tvFileSize = custom.NewStatusTextField(headerWidth, "Session Size", "0 bytes")
+	tui.tvErrorCount = custom.NewStatusTextField(headerWidth, "Errors", "0")
+
+	statusColOffset := 0
+	statusGrid.AddItem(tui.tvTransportStatus.GetGrid(), 0, statusColOffset, 1, 1, 0, 0, false)
+	statusGrid.AddItem(tui.tvPosition.GetGrid(), 1, statusColOffset, 1, 1, 0, 0, false)
+	statusGrid.AddItem(tui.tvFormat.GetGrid(), 2, statusColOffset, 1, 1, 0, 0, false)
+	statusGrid.AddItem(tui.tvFileSize.GetGrid(), 3, statusColOffset, 1, 1, 0, 0, false)
+	statusGrid.AddItem(tui.tvErrorCount.GetGrid(), 4, statusColOffset, 1, 1, 0, 0, false)
+
+	tui.meterDiskSpace = custom.NewStatusMeter(headerWidth, "Disk Space", 65, "%")
+	tui.meterBuffer = custom.NewStatusMeter(headerWidth, "Buffer", 18, "%")
+
+	meterColOffset := 1
+	statusGrid.AddItem(tui.meterDiskSpace.GetGrid(), 0, meterColOffset, 1, 1, 0, 0, false)
+	statusGrid.AddItem(tui.meterBuffer.GetGrid(), 1, meterColOffset, 1, 1, 0, 0, false)
 
 	grid.AddItem(statusGrid, 0, 0, 1, 1, 0, 0, false)
 
@@ -163,8 +171,6 @@ func (tui *Tui) Initalize() {
 	levelsGrid.SetBorders(false)
 	levelsGrid.SetPadding(0, 0, 0, 0)
 	levelsGrid.SetColumns(levelColumns...)
-	// levelsGrid.SetRows(2, 0, 1)
-	levelsGrid.SetRows(0)
 	grid.AddItem(levelsGrid, 1, 0, 1, 1, 0, 0, false)
 
 	tui.tvLogs = cview.NewTextView()
@@ -192,8 +198,12 @@ func (tui *Tui) Initalize() {
 		tui.meters[i].SetLevel(-99)
 		tui.meters[i].SetChannelNumber(fmt.Sprintf("%d", i+1))
 
+		if (i >= 8 && i <= 16) || (i >= 19 && i <= 27) {
+			tui.meters[i].ArmChannel(true)
+		}
+
 		if i%2 == 1 {
-			tui.meters[i].SetBackgroundColor(tcell.Color233)
+			tui.meters[i].SetBackgroundColor(meterAlternateBackground)
 		}
 
 		levelsGrid.AddItem(tui.meters[i], 0, i+1, 1, 1, 0, 0, false)
@@ -261,7 +271,6 @@ func (tui *Tui) SetTransportStatus(status int) {
 		panic("invalid status value provided: " + string(status))
 	}
 
-	tui.tvTransportStatus.Clear()
 	var icon rune
 	var color tcell.Color
 
@@ -279,18 +288,16 @@ func (tui *Tui) SetTransportStatus(status int) {
 		tui.transportStatus = "Recording"
 	}
 
-	tui.tvTransportStatus.Write([]byte(string(icon) + " " + tui.transportStatus))
-	tui.tvTransportStatus.SetTextColor(color)
+	tui.tvTransportStatus.SetCurrentValue(string(icon) + " " + tui.transportStatus)
+	tui.tvTransportStatus.SetColor(color)
 }
 
 func (tui *Tui) SetAudioFormat(format string) {
-	tui.tvFormat.Clear()
-	tui.tvFormat.Write([]byte(format))
+	tui.tvFormat.SetCurrentValue(format)
 }
 
 func (tui *Tui) SetSessionSize(size uint64) {
-	tui.tvFileSize.Clear()
-	tui.tvFileSize.Write([]byte(format_size(size)))
+	tui.tvFileSize.SetCurrentValue(format_size(size))
 }
 
 func format_size(bytes uint64) string {

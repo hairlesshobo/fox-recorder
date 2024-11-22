@@ -75,7 +75,7 @@ func testUi(channels int, freezeMeters bool) {
 	displayHandle.tui.WriteLog("Input ports connected")
 
 	go func() {
-		t := time.NewTicker(100 * time.Millisecond)
+		t := time.NewTicker(150 * time.Millisecond)
 		levels := make([]*shared.SignalLevel, channels)
 
 		displayHandle.tui.SetTransportStatus(2)
@@ -84,6 +84,7 @@ func testUi(channels int, freezeMeters bool) {
 		size := uint64(0)
 	out:
 		for range t.C {
+			// TODO: have the random meters fall off more gradually to seem more realistic
 			size += uint64(rand.IntN(5) * 1024 * 32)
 
 			if displayHandle.tui.IsShutdown() {
@@ -91,7 +92,7 @@ func testUi(channels int, freezeMeters bool) {
 			}
 
 			for channel := range channels {
-				newLevel := rand.IntN(24) * (-1)
+				newLevel := (rand.IntN(70) + 0) * (-1)
 
 				levels[channel] = &shared.SignalLevel{
 					Instant: int(newLevel),

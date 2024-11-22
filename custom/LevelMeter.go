@@ -49,18 +49,15 @@ type LevelMeter struct {
 	// Rune to use when rendering the filled area of the level meter.
 	filledRune rune
 
-	// Current level.
-	level int
-
-	peakLevel int
-
-	peakHoldTimeMs int
-
-	lastPeakTime int64
-
-	longTermMaxLevel int
-
 	channelNumber string
+	channelArmed  bool
+
+	// Current levels
+	level            int
+	peakLevel        int
+	peakHoldTimeMs   int
+	lastPeakTime     int64
+	longTermMaxLevel int
 
 	// Maximum level passable to the level meter
 	maxLevel int
@@ -70,6 +67,8 @@ type LevelMeter struct {
 
 	// slice containing meter level steps
 	meterSteps []int
+
+	disarmedColor tcell.Color
 
 	// meter level to foreground color map
 	colorMap map[int]tcell.Color
@@ -90,7 +89,9 @@ func NewLevelMeter(meterSteps []int, colorMap map[int]tcell.Color) *LevelMeter {
 		peakLevel:        -150,
 		level:            -150,
 		longTermMaxLevel: -150,
+		disarmedColor:    tcell.Color237,
 		channelNumber:    "",
+		channelArmed:     false,
 		meterSteps:       meterSteps,
 		colorMap:         colorMap,
 	}
@@ -212,6 +213,13 @@ func getLevelColor(colorMap map[int]tcell.Color, currentLevel int) tcell.Color {
 	return tcell.ColorPurple
 }
 
+func (p *LevelMeter) ArmChannel(armed bool) {
+	p.Lock()
+	defer p.Unlock()
+
+	p.channelArmed = armed
+}
+
 // Draw draws this primitive onto the screen.
 func (p *LevelMeter) Draw(screen tcell.Screen) {
 	if !p.GetVisible() {
@@ -252,9 +260,17 @@ func (p *LevelMeter) Draw(screen tcell.Screen) {
 			}
 		}
 
+		if !p.channelArmed {
+			if doDraw {
+				style = style.Foreground(p.disarmedColor)
+			} else {
+				style = style.Foreground(p.disarmedColor).Dim(true)
+			}
+		}
+
 		if doDraw {
 			for w := 0; w < meterWidth; w++ {
-				screen.SetContent(x+w, y+(step), p.filledRune, nil, style)
+				screen.SetContent(x+w, y+(step), p.filledRune, nil, style.Dim(!p.channelArmed))
 			}
 		} else {
 			for w := 0; w < meterWidth; w++ {
