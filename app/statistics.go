@@ -25,7 +25,6 @@ package app
 import (
 	"fmt"
 	"fox-audio/util"
-	"log/slog"
 	"math"
 	"os"
 )
@@ -54,7 +53,7 @@ func initStatistics() {
 		avgAudioLoad := processTimeAvg / idleTimeAvg
 
 		displayHandle.tui.SetAudioLoad(int(avgAudioLoad * 100.0))
-		slog.Debug(fmt.Sprintf("Idle time: %0.0f us, Process time: %0.0f us, load %0.3f%%", idleTimeAvg, processTimeAvg, avgAudioLoad))
+		util.TraceLog(fmt.Sprintf("Idle time: %0.0f us, Process time: %0.0f us, load %0.3f%%", idleTimeAvg, processTimeAvg, avgAudioLoad))
 	})
 
 	// disk space utilization
@@ -65,6 +64,6 @@ func initStatistics() {
 		diskInfo := util.GetDiskSpace(wd)
 		displayHandle.tui.SetDiskUsage(int(math.Round(diskInfo.UsedPct * 100.0)))
 
-		slog.Debug(fmt.Sprintf("Disk total: %d B, Disk Used: %d B, Disk free: %d B, used %0.2f%%", diskInfo.Size, diskInfo.Used, diskInfo.Free, diskInfo.UsedPct))
+		util.TraceLog(fmt.Sprintf("Disk total: %d B, Disk Used: %d B, Disk free: %d B, used %0.2f%%", diskInfo.Size, diskInfo.Used, diskInfo.Free, diskInfo.UsedPct))
 	})
 }

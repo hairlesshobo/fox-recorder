@@ -22,7 +22,18 @@
 // =================================================================================
 package util
 
-import "fmt"
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
+
+	"gopkg.in/yaml.v2"
+)
 
 func DumpRunes(start int, count int) {
 	// 9150
@@ -30,4 +41,103 @@ func DumpRunes(start int, count int) {
 	for i := start; i < start+count; i++ {
 		fmt.Printf("%03d %s\n", i, string(rune(i)))
 	}
+}
+
+func FileExists(path string) bool {
+	// if an error occurred or its a directory, we throw up
+	if stat, err := os.Stat(path); err != nil || stat.IsDir() {
+		return false
+	}
+
+	return true
+}
+
+func ResolveHomeDirPath(testPath string) (string, error) {
+	if strings.HasPrefix(testPath, "~/") {
+		// TODO: make this a shared function
+		homeDir, err := os.UserHomeDir()
+
+		if err != nil {
+			return "", errors.New("could not find user home dir: " + err.Error())
+		}
+
+		return path.Join(homeDir, testPath[2:]), nil
+	}
+
+	return testPath, nil
+}
+
+func ReadYamlFile(cfg interface{}, fileName string) error {
+	filePath := ""
+
+	if path.IsAbs(fileName) {
+		filePath = fileName
+
+	} else {
+		if strings.HasPrefix(fileName, "~/") {
+			testFilePath, err := ResolveHomeDirPath(fileName)
+			if err != nil {
+				slog.Error(err.Error())
+				return err
+			}
+
+			if FileExists(testFilePath) {
+				filePath = testFilePath
+			}
+
+		} else {
+			binPath, _ := os.Executable()
+			binDir := filepath.Dir(binPath)
+			sidecarPath := path.Join(binDir, fileName)
+
+			if FileExists(sidecarPath) {
+				filePath = sidecarPath
+
+			} else {
+				homeDir, err := os.UserHomeDir()
+				if err != nil {
+					slog.Error("could not find user home dir: " + err.Error())
+					return err
+				}
+
+				homeDotConfigPath := path.Join(homeDir, ".config", "fox", fileName)
+
+				if FileExists(homeDotConfigPath) {
+					filePath = homeDotConfigPath
+				}
+			}
+		}
+	}
+
+	if filePath == "" {
+		err := errors.New("no yaml file found")
+		slog.Error(err.Error())
+		return err
+	}
+
+	if !FileExists(filePath) {
+		err := errors.New("the specified yaml file does not exist: " + filePath)
+		slog.Error(err.Error())
+		return err
+	}
+
+	slog.Info("Reading yaml from " + filePath)
+
+	f, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	decoder := yaml.NewDecoder(f)
+	err = decoder.Decode(cfg)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func TraceLog(message string, args ...any) {
+	slog.Log(context.Background(), slog.Level(-10), message, args...)
 }

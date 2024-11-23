@@ -23,6 +23,8 @@
 package app
 
 import (
+	"fox-audio/util"
+	"log/slog"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -33,6 +35,7 @@ var (
 	argSimulate             bool
 	argSimulateChannelCount int
 	argSimulateFreezeMeters bool
+	argProfileName          string
 
 	rootCmd = &cobra.Command{
 		Use:   "record",
@@ -40,27 +43,37 @@ var (
 
 		Run: func(cmd *cobra.Command, args []string) {
 			// config := cmd.Context().Value(model.ImportConfigContext).(model.ImporterConfig)
+			if argProfileName == "" {
+				slog.Error("Profile not specified but is REQUIRED. See fox --help for more info")
+				os.Exit(1)
+			}
 
-			runEngine(argSimulate, argSimulateFreezeMeters, argSimulateChannelCount)
+			profile := util.ReadProfile(argProfileName)
+
+			runEngine(profile, argSimulate, argSimulateFreezeMeters, argSimulateChannelCount)
 		},
 	}
 )
 
 func init() {
 	// ui test commands
-	rootCmd.Flags().BoolVarP(&argSimulate, "simulate", "", false, "Freeze the meters (don't randomly set level)")
-	rootCmd.Flags().BoolVarP(&argSimulateFreezeMeters, "simulate-freeze-meters", "", false, "Freeze the meters (don't randomly set level)")
-	rootCmd.Flags().IntVarP(&argSimulateChannelCount, "simulate-channel-count", "", 32, "Mumber of channels to simulate in UI test")
+	rootCmd.Flags().BoolVar(&argSimulate, "simulate", false, "Freeze the meters (don't randomly set level)")
+	rootCmd.Flags().BoolVar(&argSimulateFreezeMeters, "simulate-freeze-meters", false, "Freeze the meters (don't randomly set level)")
+	rootCmd.Flags().IntVar(&argSimulateChannelCount, "simulate-channel-count", 32, "Mumber of channels to simulate in UI test")
 
 	// importCmd.Flags().BoolVarP(&importArgIndividual, "individual", "i", false, "Run a single import without connecting to the running server")
 	// importCmd.Flags().BoolVarP(&importArgDryRun, "dry_run", "n", false, "Perform a dry-run import (don't copy anything)")
 	// importCmd.Flags().BoolVarP(&importArgDump, "dump", "d", false, "If set, dump the list of scanned files to json and exit (for debugging only)")
-	// importCmd.Flags().StringVarP(&importArgServer, "server", "s", "localhost:7273", "<host>:<port> -- If specified, connect to the specified server instance to queue an import")
+	rootCmd.Flags().StringVarP(&argProfileName, "profile", "p", "", "Name or path of the profile to load, REQUIRED")
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
+	// logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+	// 	Level: slog.Level(slog.LevelDebug),
+	// }))
+	// slog.SetDefault(logger)
 	// ctx := context.WithValue(context.TODO(), model.ImportConfigContext, config)
 	// err := rootCmd.ExecuteContext(ctx)
 

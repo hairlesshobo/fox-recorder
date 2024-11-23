@@ -24,15 +24,16 @@ package app
 
 import (
 	"fmt"
+	"log/slog"
+
 	"fox-audio/audio"
 	"fox-audio/display"
 	"fox-audio/model"
 	"fox-audio/reaper"
 	"fox-audio/shared"
-	"log/slog"
-	"os"
 )
 
+// TODO: move to config
 const jackClientName = "fox"
 
 type displayObj struct {
@@ -45,7 +46,7 @@ var (
 	audioServer   *audio.JackServer
 )
 
-func runEngine(simulate bool, simulateFreezeMeters bool, simulateChannelCount int) {
+func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool, simulateChannelCount int) {
 	displayHandle.tui = display.NewTui()
 	displayHandle.tui.Initalize()
 	displayHandle.tui.SetTransportStatus(3)
@@ -53,16 +54,19 @@ func runEngine(simulate bool, simulateFreezeMeters bool, simulateChannelCount in
 
 	initStatistics()
 
-	// handler := shared.NewTuiLogHandler(displayHandle.tui, slog.LevelDebug)
-	f, err := os.Create("/Users/flip/projects/personal/fox-recorder/fox.log")
+	// f, err := os.Create("/Users/flip/projects/personal/fox-recorder/fox.log")
 
-	if err != nil {
-		panic(err)
-	}
+	// if err != nil {
+	// 	panic(err)
+	// }
 
-	handler := slog.NewTextHandler(f, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	})
+	// handler := slog.NewTextHandler(f, &slog.HandlerOptions{
+	// 	Level: slog.LevelDebug,
+	// })
+	// logger := slog.New(handler)
+	// slog.SetDefault(logger)
+
+	handler := shared.NewTuiLogHandler(displayHandle.tui, slog.LevelDebug)
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
 
@@ -70,7 +74,7 @@ func runEngine(simulate bool, simulateFreezeMeters bool, simulateChannelCount in
 	shared.EnableSlogLogging()
 
 	if !simulate {
-		audioServer = audio.NewServer(jackClientName, "coreaudio/", 44100, 2048)
+		audioServer = audio.NewServer(jackClientName, profile.AudioServer)
 		audioServer.SetErrorCallback(jackError)
 		audioServer.SetInfoCallback(jackInfo)
 

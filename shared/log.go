@@ -68,20 +68,17 @@ func HijackLogging() {
 	stockStdout = os.Stdout
 	stockStderr = os.Stderr
 
-	cancelChan := make(chan bool, 1)
-	defer close(cancelChan)
-
 	stdout_r, stdout_w, err := os.Pipe()
 	if err != nil {
 		fmt.Fprintln(stockStderr, err)
 	}
-	go logProcessor(stdout_r, INFO, cancelChan)
+	go logProcessor(stdout_r, INFO)
 
 	stderr_r, stderr_w, err := os.Pipe()
 	if err != nil {
 		fmt.Fprintln(stockStderr, err)
 	}
-	go logProcessor(stderr_r, ERROR, cancelChan)
+	go logProcessor(stderr_r, ERROR)
 
 	os.Stdout = stdout_w
 	os.Stderr = stderr_w
@@ -120,7 +117,7 @@ func slogLogger(level LogLevel, message string) {
 	}
 }
 
-func logProcessor(pipe *os.File, level LogLevel, cancelChan chan bool) {
+func logProcessor(pipe *os.File, level LogLevel) {
 	// TODO: i think this one can be killed automatically when program terminates and not rely on reaper
 	scanner := bufio.NewScanner(pipe)
 

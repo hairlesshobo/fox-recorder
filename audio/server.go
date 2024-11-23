@@ -25,6 +25,7 @@ package audio
 import (
 	"bufio"
 	"fmt"
+	"fox-audio/model"
 	"fox-audio/reaper"
 	"log/slog"
 	"os/exec"
@@ -35,12 +36,12 @@ import (
 )
 
 type JackServer struct {
-	clientName       string
-	audioInterface   string
-	driver           string
-	device           string
-	sampleRate       int
-	samplesPerPeriod int
+	clientName      string
+	audioInterface  string
+	driver          string
+	device          string
+	sampleRate      int
+	framesPerPeriod int
 
 	ports []*Port
 
@@ -49,14 +50,15 @@ type JackServer struct {
 	cmd *exec.Cmd
 }
 
-func NewServer(clientName string, audioInterface string, sampleRate int, samplesPerPeriod int) *JackServer {
-	audioInterfaceParts := strings.Split(audioInterface, "/")
+func NewServer(clientName string, config model.ProfileAudioServer) *JackServer {
+	audioInterfaceParts := strings.Split(config.Interface[0], "/")
 
+	// TODO: add support for multiple interfaces
 	server := JackServer{
-		clientName:       clientName,
-		audioInterface:   audioInterface,
-		sampleRate:       sampleRate,
-		samplesPerPeriod: samplesPerPeriod,
+		clientName:      clientName,
+		audioInterface:  config.Interface[0],
+		sampleRate:      config.SampleRate,
+		framesPerPeriod: config.FramesPerPeriod,
 
 		driver: audioInterfaceParts[0],
 		device: audioInterfaceParts[1],
@@ -70,21 +72,31 @@ func NewServer(clientName string, audioInterface string, sampleRate int, samples
 func (server *JackServer) StartServer() {
 	// TODO: spawn as goroutine, add channel to wait for server to start then return input and output ports
 	ready := make(chan bool)
+	fmt.Println("meow")
 
 	go func() {
 		reaper.Register()
 
 		slog.Info("Starting JACK server...")
+		// TODO: dynamically find jackd binary
+		// TODO: allow to specify jack binary in config
 		// /usr/local/bin/jackd -dcoreaudio -d'AppleUSBAudioEngine:BEHRINGER:X-USB:42D1635E:1,2' -r48000 -p4096 -C
-		server.cmd = exec.Command(
-			"/usr/local/bin/jackd",
-			"-v",
-			fmt.Sprintf("-d%s", server.driver),
-			fmt.Sprintf("-d%s", server.device),
-			fmt.Sprintf("-r%d", server.sampleRate),
-			fmt.Sprintf("-p%d", server.samplesPerPeriod),
-		)
+		server.cmd = exec.Command("/usr/local/bin/jackd")
+
+		// TODO: add this to config
+		// server.cmd.Args = append(server.cmd.Args, "-v")
+		server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-d%s", server.driver))
+
+		if server.device != "" {
+			server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-d%s", server.device))
+		}
+
+		server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-r%d", server.sampleRate))
+		server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-p%d", server.framesPerPeriod))
+
 		stdout, err := server.cmd.StdoutPipe()
+
+		// TODO: handle jack startup failure!!
 
 		if err != nil {
 			slog.Error("Error occurred running 'diskutil activity' command: " + err.Error())
@@ -101,7 +113,7 @@ func (server *JackServer) StartServer() {
 			// not using reaper.Reaped() here because this should end on its own once the jack server is killed
 			line := scanner.Text()
 
-			slog.Debug(line)
+			slog.Debug("jackd: " + line)
 
 			// found input channel
 			if strings.Contains(line, "JACK input port =") {

@@ -20,30 +20,21 @@
 //			limitations under the License.
 //
 // =================================================================================
-package model
+package util
 
-type Profile struct {
-	AudioServer ProfileAudioServer `yaml:"audio_server"`
-	Output      ProfileOutput      `yaml:"output"`
-	Channels    []ProfileChannel   `yaml:"channels"`
-}
+import (
+	"fox-audio/model"
+	"strings"
+)
 
-type ProfileAudioServer struct {
-	Interface         []string `yaml:"interface"`
-	SampleRate        int      `yaml:"sample_rate"`
-	FramesPerPeriod   int      `yaml:"frames_per_period"`
-	BufferSizeSeconds float64  `yaml:"buffer_size_seconds"`
-	MinimumWriteSize  uint     `yaml:"minimum_write_size"`
-}
+func ReadProfile(profilePath string) *model.Profile {
+	if !strings.HasSuffix(profilePath, ".profile") {
+		profilePath += ".profile"
+	}
 
-type ProfileChannel struct {
-	Ports       []int  `yaml:"ports"`
-	ChannelName string `yaml:"channel_name"`
-	Enabled     bool   `yaml:"enabled"`
-}
+	profile := &model.Profile{}
 
-type ProfileOutput struct {
-	Directory string `yaml:"directory"`
-	Format    string `yaml:"format"`
-	BitDepth  int    `yaml:"bit_depth"`
+	ReadYamlFile(profile, profilePath)
+
+	return profile
 }
