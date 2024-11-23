@@ -36,6 +36,8 @@ import (
 )
 
 type JackServer struct {
+	profile *model.Profile
+
 	clientName      string
 	audioInterface  string
 	driver          string
@@ -43,22 +45,25 @@ type JackServer struct {
 	sampleRate      int
 	framesPerPeriod int
 
-	ports []*Port
+	ports       []*Port
+	outputFiles []*OutputFile
 
 	jackClient *jack.Client
 
 	cmd *exec.Cmd
 }
 
-func NewServer(clientName string, config model.ProfileAudioServer) *JackServer {
-	audioInterfaceParts := strings.Split(config.Interface[0], "/")
+func NewServer(clientName string, profile *model.Profile) *JackServer {
+	audioInterfaceParts := strings.Split(profile.AudioServer.Interface[0], "/")
 
 	// TODO: add support for multiple interfaces
 	server := JackServer{
+		profile: profile,
+
 		clientName:      clientName,
-		audioInterface:  config.Interface[0],
-		sampleRate:      config.SampleRate,
-		framesPerPeriod: config.FramesPerPeriod,
+		audioInterface:  profile.AudioServer.Interface[0],
+		sampleRate:      profile.AudioServer.SampleRate,
+		framesPerPeriod: profile.AudioServer.FramesPerPeriod,
 
 		driver: audioInterfaceParts[0],
 		device: audioInterfaceParts[1],
@@ -70,9 +75,7 @@ func NewServer(clientName string, config model.ProfileAudioServer) *JackServer {
 }
 
 func (server *JackServer) StartServer() {
-	// TODO: spawn as goroutine, add channel to wait for server to start then return input and output ports
 	ready := make(chan bool)
-	fmt.Println("meow")
 
 	go func() {
 		reaper.Register()
@@ -184,6 +187,53 @@ func (server *JackServer) Disconnect() {
 
 func (server *JackServer) GetAllPorts() []*Port {
 	return server.ports
+}
+
+func (server *JackServer) findJackPort(name string) *Port {
+	for _, port := range server.ports {
+		if port.jackName == name {
+			return port
+		}
+	}
+
+	return nil
+}
+
+func (server *JackServer) GetOutputFiles() []*OutputFile {
+	return server.outputFiles
+}
+
+func (server *JackServer) PrepareOutputFiles() {
+	take := "A"
+
+	for _, channel := range server.profile.Channels {
+		portNumbers := make([]string, len(channel.Ports))
+
+		for i, channel := range channel.Ports {
+			portNumbers[i] = fmt.Sprintf("%02d", channel)
+		}
+
+		outputFile := OutputFile{
+			// TODO: support multiple takes
+			FileName:   fmt.Sprintf("%s_channel%s_%s.wav", take, strings.Join(portNumbers, "-"), channel.ChannelName),
+			InputPorts: make([]*Port, 0),
+		}
+
+		for _, channelPort := range channel.Ports {
+			jackPort := server.findJackPort(fmt.Sprintf("system:capture_%d", channelPort))
+
+			if jackPort != nil {
+				outputFile.InputPorts = append(outputFile.InputPorts, jackPort)
+
+				success := jackPort.AllocateBuffer(int(float64(server.profile.AudioServer.SampleRate) * server.profile.AudioServer.BufferSizeSeconds))
+
+				// TODO: make sure a port can only be assigned once - add channel to port and compare that its not a different channel
+				if !success {
+					slog.Error("Failed to allocate buffer for port " + jackPort.jackName)
+				}
+			}
+		}
+	}
 }
 
 func (server *JackServer) GetPorts(direction PortDirection) []*Port {

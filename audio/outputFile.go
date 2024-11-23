@@ -20,13 +20,12 @@
 //			limitations under the License.
 //
 // =================================================================================
-package model
+package audio
 
 type OutputFile struct {
-	FileName      string
-	InputChannels []*InputChannel
-}
-
-func (file *OutputFile) GetChannelCount() int32 {
-	return int32(len(file.InputChannels))
+	FileName   string
+	InputPorts []*Port
+	// Encoder
+	// FileHandle
+	// ChannelCount
 }

@@ -39,6 +39,7 @@ type Port struct {
 	connected     bool
 	jackName      string
 	jackPort      *jack.Port
+	buffer        chan float32
 }
 
 func newPort(direction PortDirection, myName string, jackName string) *Port {
@@ -60,4 +61,14 @@ func (port *Port) GetJackPort() *jack.Port {
 
 func (port *Port) GetBuffer(nframes uint32) []jack.AudioSample {
 	return port.jackPort.GetBuffer(nframes)
+}
+
+func (port *Port) AllocateBuffer(size int) bool {
+	if cap(port.buffer) > 0 {
+		return false
+	}
+
+	port.buffer = make(chan float32, size)
+
+	return true
 }

@@ -74,7 +74,7 @@ func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool,
 	shared.EnableSlogLogging()
 
 	if !simulate {
-		audioServer = audio.NewServer(jackClientName, profile.AudioServer)
+		audioServer = audio.NewServer(jackClientName, profile)
 		audioServer.SetErrorCallback(jackError)
 		audioServer.SetInfoCallback(jackInfo)
 
@@ -105,6 +105,10 @@ func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool,
 		audioServer.ActivateClient()
 
 		audioServer.ConnectPorts(true, false)
+
+		audioServer.PrepareOutputFiles()
+		// TODO: wire up output files
+		// GetOutputFiles
 
 		displayHandle.tui.SetAudioFormat(fmt.Sprintf("%0.1fKHz", float64(audioServer.GetSampleRate())/1000.0))
 

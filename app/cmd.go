@@ -61,9 +61,6 @@ func init() {
 	rootCmd.Flags().BoolVar(&argSimulateFreezeMeters, "simulate-freeze-meters", false, "Freeze the meters (don't randomly set level)")
 	rootCmd.Flags().IntVar(&argSimulateChannelCount, "simulate-channel-count", 32, "Mumber of channels to simulate in UI test")
 
-	// importCmd.Flags().BoolVarP(&importArgIndividual, "individual", "i", false, "Run a single import without connecting to the running server")
-	// importCmd.Flags().BoolVarP(&importArgDryRun, "dry_run", "n", false, "Perform a dry-run import (don't copy anything)")
-	// importCmd.Flags().BoolVarP(&importArgDump, "dump", "d", false, "If set, dump the list of scanned files to json and exit (for debugging only)")
 	rootCmd.Flags().StringVarP(&argProfileName, "profile", "p", "", "Name or path of the profile to load, REQUIRED")
 }
 
