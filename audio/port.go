@@ -59,7 +59,7 @@ func (port *Port) GetJackPort() *jack.Port {
 	return port.jackPort
 }
 
-func (port *Port) GetBuffer(nframes uint32) []jack.AudioSample {
+func (port *Port) GetJackBuffer(nframes uint32) []jack.AudioSample {
 	return port.jackPort.GetBuffer(nframes)
 }
 
@@ -71,4 +71,8 @@ func (port *Port) AllocateBuffer(size int) bool {
 	port.buffer = make(chan float32, size)
 
 	return true
+}
+
+func (port *Port) GetWriteBuffer() chan float32 {
+	return port.buffer
 }

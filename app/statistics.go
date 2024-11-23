@@ -25,6 +25,7 @@ package app
 import (
 	"fmt"
 	"fox-audio/util"
+	"log/slog"
 	"math"
 	"os"
 )
@@ -65,5 +66,25 @@ func initStatistics() {
 		displayHandle.tui.SetDiskUsage(int(math.Round(diskInfo.UsedPct * 100.0)))
 
 		util.TraceLog(fmt.Sprintf("Disk total: %d B, Disk Used: %d B, Disk free: %d B, used %0.2f%%", diskInfo.Size, diskInfo.Used, diskInfo.Free, diskInfo.UsedPct))
+	})
+
+	// buffer utilization
+	util.ProcessOnInterval(200, func() {
+		sum := float64(0.0)
+		count := 0
+
+		for _, port := range ports {
+			buffer := port.GetWriteBuffer()
+
+			sum += float64(len(buffer)) / float64(cap(buffer))
+			count += 1
+		}
+
+		bufferAvg := sum / float64(count)
+
+		slog.Info(fmt.Sprintf("buffer: %0.2f%%", bufferAvg))
+		displayHandle.tui.SetBufferUtilization(int(math.Round(bufferAvg * 100.0)))
+
+		// util.TraceLog(fmt.Sprintf("Disk total: %d B, Disk Used: %d B, Disk free: %d B, used %0.2f%%", diskInfo.Size, diskInfo.Used, diskInfo.Free, diskInfo.UsedPct))
 	})
 }

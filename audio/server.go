@@ -233,6 +233,8 @@ func (server *JackServer) PrepareOutputFiles() {
 				}
 			}
 		}
+
+		server.outputFiles = append(server.outputFiles, &outputFile)
 	}
 }
 

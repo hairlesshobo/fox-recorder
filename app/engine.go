@@ -42,8 +42,9 @@ type displayObj struct {
 
 var (
 	displayHandle displayObj
-	ports         []*audio.Port
 	audioServer   *audio.JackServer
+	ports         []*audio.Port
+	outputFiles   []*audio.OutputFile
 )
 
 func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool, simulateChannelCount int) {
@@ -104,11 +105,11 @@ func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool,
 
 		audioServer.ActivateClient()
 
-		audioServer.ConnectPorts(true, false)
-
 		audioServer.PrepareOutputFiles()
-		// TODO: wire up output files
-		// GetOutputFiles
+		outputFiles = audioServer.GetOutputFiles()
+		startDiskWriter(profile)
+
+		audioServer.ConnectPorts(true, false)
 
 		displayHandle.tui.SetAudioFormat(fmt.Sprintf("%0.1fKHz", float64(audioServer.GetSampleRate())/1000.0))
 

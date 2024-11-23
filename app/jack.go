@@ -27,14 +27,20 @@ import (
 	"fox-audio/model"
 	"fox-audio/util"
 
-	// "fox-audio/util"
 	"log/slog"
 	"time"
 )
 
 var (
-	signalLevels []*model.SignalLevel
+	signalLevels     []*model.SignalLevel
+	cycleDoneChannel chan bool
 )
+
+func init() {
+	// TODO: does this need to change?
+	// TODO: do we need to track this channel fill ratio too?
+	cycleDoneChannel = make(chan bool, 30)
+}
 
 func jackError(message string) {
 	slog.Error("JACK: " + message)
@@ -69,7 +75,7 @@ func jackProcess(nframes uint32) int {
 	for portNum, port := range ports {
 
 		// get the incoming audio samples
-		samplesIn := port.GetJackPort().GetBuffer(nframes)
+		samplesIn := port.GetJackBuffer(nframes)
 
 		sigLevel := float32(-1.0)
 
@@ -84,9 +90,28 @@ func jackProcess(nframes uint32) int {
 		signalLevels[portNum] = &model.SignalLevel{
 			Instant: int(util.AmplitudeToDb(sigLevel)),
 		}
+
+		// TODO: add a check to make sure recording is enabled
+
+		// if it has a buffer, its enabled
+		// TODO: change this to an explicit Enabled flag?
+		writeBuffer := port.GetWriteBuffer()
+		if cap(writeBuffer) > 0 {
+			if (len(writeBuffer) + int(nframes)) < cap(writeBuffer) {
+				for _, sample := range samplesIn {
+					writeBuffer <- float32(sample)
+				}
+
+			} else {
+				// TODO: track these errors
+				slog.Warn("No space left in write buffer!!")
+			}
+		}
 	}
 
 	displayHandle.tui.UpdateSignalLevels(signalLevels)
+
+	cycleDoneChannel <- true
 
 	// audio load statistics
 	stats.lastEndTime = time.Now().UnixMicro()

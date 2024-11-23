@@ -382,3 +382,15 @@ func (tui *Tui) SetDiskUsage(percent int) {
 		tui.meterDiskSpace.SetColor(theme.Red)
 	}
 }
+
+func (tui *Tui) SetBufferUtilization(percent int) {
+	tui.meterBuffer.SetCurrentValue(percent)
+
+	if percent <= 50 {
+		tui.meterBuffer.SetColor(theme.Green)
+	} else if percent <= 75 {
+		tui.meterBuffer.SetColor(theme.Yellow)
+	} else {
+		tui.meterBuffer.SetColor(theme.Red)
+	}
+}

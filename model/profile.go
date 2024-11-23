@@ -33,7 +33,7 @@ type ProfileAudioServer struct {
 	SampleRate        int      `yaml:"sample_rate"`
 	FramesPerPeriod   int      `yaml:"frames_per_period"`
 	BufferSizeSeconds float64  `yaml:"buffer_size_seconds"`
-	MinimumWriteSize  uint     `yaml:"minimum_write_size"`
+	MinimumWriteSize  float64  `yaml:"minimum_write_size"`
 }
 
 type ProfileChannel struct {
