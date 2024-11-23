@@ -23,8 +23,10 @@
 package app
 
 import (
+	"fmt"
 	"fox-audio/audio"
 	"fox-audio/display"
+	"fox-audio/model"
 	"fox-audio/reaper"
 	"fox-audio/shared"
 	"log/slog"
@@ -40,6 +42,7 @@ type displayObj struct {
 var (
 	displayHandle displayObj
 	ports         []*audio.Port
+	audioServer   *audio.JackServer
 )
 
 func runEngine(simulate bool, simulateFreezeMeters bool, simulateChannelCount int) {
@@ -66,8 +69,6 @@ func runEngine(simulate bool, simulateFreezeMeters bool, simulateChannelCount in
 	shared.HijackLogging()
 	shared.EnableSlogLogging()
 
-	var audioServer *audio.JackServer
-
 	if !simulate {
 		audioServer = audio.NewServer(jackClientName, "coreaudio/", 44100, 2048)
 		audioServer.SetErrorCallback(jackError)
@@ -81,7 +82,9 @@ func runEngine(simulate bool, simulateFreezeMeters bool, simulateChannelCount in
 		audioServer.StartServer()
 		reaper.Callback(audioServer.StopServer)
 
-		displayHandle.tui.SetChannelCount(len(audioServer.GetInputPorts()))
+		ports = audioServer.GetInputPorts()
+		displayHandle.tui.SetChannelCount(len(ports))
+		signalLevels = make([]*model.SignalLevel, len(ports))
 		displayHandle.tui.SetTransportStatus(0)
 
 		audioServer.Connect()
@@ -89,22 +92,17 @@ func runEngine(simulate bool, simulateFreezeMeters bool, simulateChannelCount in
 
 		// only register input ports, for now
 		audioServer.RegisterPorts(true, false)
-		ports = audioServer.GetInputPorts()
 
-		// // TODO: get frame time
-		// // TODO: get sample rate
-		// // TODO: set error handler
-
-		// set process callback
+		// set callbacks
 		audioServer.SetProcessCallback(jackProcess)
-
-		// set shutdown handler
 		audioServer.SetXrunCallback(jackXrun)
 		audioServer.SetShutdownCallback(func() { jackShutdown(audioServer) })
 
 		audioServer.ActivateClient()
 
 		audioServer.ConnectPorts(true, false)
+
+		displayHandle.tui.SetAudioFormat(fmt.Sprintf("%0.1fKHz", float64(audioServer.GetSampleRate())/1000.0))
 
 		slog.Info("Input ports connected")
 	}

@@ -26,8 +26,14 @@ import (
 	"fox-audio/audio"
 	"fox-audio/model"
 	"fox-audio/util"
+
+	// "fox-audio/util"
 	"log/slog"
 	"time"
+)
+
+var (
+	signalLevels []*model.SignalLevel
 )
 
 func jackError(message string) {
@@ -60,30 +66,27 @@ func jackProcess(nframes uint32) int {
 	stats.lastStartTime = time.Now().UnixMicro()
 
 	// loop through the input channels
-	levels := make([]*model.SignalLevel, len(ports))
-
 	for portNum, port := range ports {
 
 		// get the incoming audio samples
 		samplesIn := port.GetJackPort().GetBuffer(nframes)
 
-		sigLevel := -150.0
+		sigLevel := float32(-1.0)
 
 		for frame := range nframes {
-			sample := (float64)(samplesIn[frame])
-			frameLevel := util.AmplitudeToDb(sample)
+			sample := float32(samplesIn[frame])
 
-			if frameLevel > sigLevel {
-				sigLevel = frameLevel
+			if sample > sigLevel {
+				sigLevel = sample
 			}
 		}
 
-		levels[portNum] = &model.SignalLevel{
-			Instant: int(sigLevel),
+		signalLevels[portNum] = &model.SignalLevel{
+			Instant: int(util.AmplitudeToDb(sigLevel)),
 		}
 	}
 
-	displayHandle.tui.UpdateSignalLevels(levels)
+	displayHandle.tui.UpdateSignalLevels(signalLevels)
 
 	// audio load statistics
 	stats.lastEndTime = time.Now().UnixMicro()

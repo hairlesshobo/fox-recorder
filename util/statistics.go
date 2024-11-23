@@ -42,6 +42,6 @@ out:
 	return sum / float64(count)
 }
 
-func AmplitudeToDb(amplitude float64) float64 {
-	return math.Log10(amplitude) * 20.0
+func AmplitudeToDb(amplitude float32) float64 {
+	return math.Log10(float64(amplitude)) * 20.0
 }

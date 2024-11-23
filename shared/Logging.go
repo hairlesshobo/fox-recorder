@@ -30,10 +30,6 @@ import (
 	"time"
 )
 
-var stockStderr *os.File
-var stockStdout *os.File
-var logSinks = make([]LogHandler, 0)
-
 type LogHandler func(LogLevel, string)
 type LogLevel int8
 
@@ -42,6 +38,12 @@ const (
 	WARN
 	INFO
 	DEBUG
+)
+
+var (
+	stockStderr *os.File
+	stockStdout *os.File
+	logSinks    = make([]LogHandler, 0)
 )
 
 func (s LogLevel) String() string {
@@ -119,22 +121,14 @@ func slogLogger(level LogLevel, message string) {
 }
 
 func logProcessor(pipe *os.File, level LogLevel, cancelChan chan bool) {
+	// TODO: i think this one can be killed automatically when program terminates and not rely on reaper
 	scanner := bufio.NewScanner(pipe)
 
-out:
 	for scanner.Scan() {
 		line := scanner.Text()
-		// for {
-		select {
-		case doCancel := <-cancelChan:
-			if doCancel {
-				break out
-			}
 
-			for _, logger := range logSinks {
-				// logger(level, message)
-				logger(level, line)
-			}
+		for _, logger := range logSinks {
+			logger(level, line)
 		}
 	}
 }
