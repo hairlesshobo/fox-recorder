@@ -72,20 +72,20 @@ out:
 				if len(writeBuffers[0]) > requiredSamples {
 					slog.Debug("Writing samples to file")
 
-					// TODO: Need to make sure the file isn't closed
+					if !channel.FileOpen {
+						slog.Error("Cannot write to closed file, " + channel.FileName)
+						reaper.Reap()
+						return
+					}
 
 					for _, writeBuffer := range writeBuffers {
 						// TODO: do i want to limit this to the requiredSampels count or just drain what it has left?
-						wavFormat := &audio.Format{
-							NumChannels: int(channel.ChannelCount),
-							SampleRate:  int(channel.SampleRate),
-						}
-
-						samples := getSamplesFromBuffer(requiredSamples, writeBuffer)
-
 						fBuf := &audio.Float32Buffer{
-							Data:   samples,
-							Format: wavFormat,
+							Data: getSamplesFromBuffer(requiredSamples, writeBuffer),
+							Format: &audio.Format{
+								NumChannels: int(channel.ChannelCount),
+								SampleRate:  int(channel.SampleRate),
+							},
 						}
 
 						transforms.PCMScaleF32(fBuf, profile.Output.BitDepth)

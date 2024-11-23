@@ -77,8 +77,6 @@ var (
 )
 
 type Tui struct {
-	// statusUpdateChannel chan int
-	// channelCount    int
 	app             *cview.Application
 	shutdownChannel chan bool
 
@@ -115,7 +113,6 @@ type Tui struct {
 
 func NewTui() *Tui {
 	tui := &Tui{
-		// channelCount:    0,
 		shutdownChannel: make(chan bool, 1),
 	}
 
@@ -194,7 +191,7 @@ func (tui *Tui) excecuteLoop() {
 	slog.Info("TUI loop started")
 
 	for {
-		if len(tui.shutdownChannel) > 0 || reaper.Reaped() {
+		if len(tui.shutdownChannel) > 0 {
 			slog.Info("TUI shutting down")
 			tui.app.QueueUpdateDraw(func() {})
 			break
@@ -254,6 +251,11 @@ func (tui *Tui) SetChannelCount(channelCount int) {
 
 }
 
+func (tui *Tui) Shutdown() {
+	tui.app.Stop()
+	tui.WaitForShutdown()
+}
+
 func (tui *Tui) Start() {
 	go func() {
 		defer tui.app.HandlePanic()
@@ -266,9 +268,10 @@ func (tui *Tui) Start() {
 			case tcell.KeyEsc:
 			case tcell.KeyCtrlC:
 				// Exit the application
-				tui.app.Stop()
+				// tui.app.Stop()
 				reaper.Reap()
 				return nil
+				// return event
 			}
 
 			return event

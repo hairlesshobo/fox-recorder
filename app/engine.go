@@ -52,6 +52,7 @@ func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool,
 	displayHandle.tui.Initalize()
 	displayHandle.tui.SetTransportStatus(3)
 	displayHandle.tui.Start()
+	reaper.Callback("tui", displayHandle.tui.Shutdown)
 
 	initStatistics()
 

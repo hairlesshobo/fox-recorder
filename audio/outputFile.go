@@ -23,6 +23,7 @@
 package audio
 
 import (
+	"errors"
 	"os"
 
 	"github.com/go-audio/audio"
@@ -38,6 +39,7 @@ type OutputFile struct {
 	ChannelCount int
 	BitDepth     int
 	SampleRate   int
+	FileOpen     bool
 }
 
 func (of *OutputFile) GetWriteBuffers() []chan float32 {
@@ -51,16 +53,23 @@ func (of *OutputFile) GetWriteBuffers() []chan float32 {
 }
 
 func (of *OutputFile) Close() {
-	if of.Encoder != nil {
-		of.Encoder.Close()
-	}
+	if of.FileOpen {
+		if of.Encoder != nil {
+			of.Encoder.Close()
+		}
 
-	if of.FileHandle != nil {
-		of.FileHandle.Close()
-	}
+		if of.FileHandle != nil {
+			of.FileHandle.Close()
+		}
 
+		of.FileOpen = false
+	}
 }
 
 func (of *OutputFile) Write(buf *audio.IntBuffer) error {
+	if !of.FileOpen {
+		return errors.New("output file is already closed, " + of.FileName)
+	}
+
 	return of.Encoder.Write(buf)
 }

@@ -23,9 +23,10 @@
 package app
 
 import (
-	"fox-audio/util"
 	"log/slog"
 	"os"
+
+	"fox-audio/util"
 
 	"github.com/spf13/cobra"
 )

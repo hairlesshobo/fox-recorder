@@ -51,6 +51,9 @@ type JackServer struct {
 	sampleRate      int
 	framesPerPeriod int
 
+	outputDirectory string
+	take            string
+
 	ports       []*Port
 	outputFiles []*OutputFile
 
@@ -245,9 +248,7 @@ func (server *JackServer) GetOutputFiles() []*OutputFile {
 	return server.outputFiles
 }
 
-func (server *JackServer) PrepareOutputFiles() {
-	take := "A"
-
+func (server *JackServer) prepareOutputDirectory() {
 	outputDir, err := util.ResolveHomeDirPath(time.Now().Format(server.profile.Output.Directory))
 	if err != nil {
 		slog.Error("Failed to resolve home user dir: " + err.Error())
@@ -260,6 +261,13 @@ func (server *JackServer) PrepareOutputFiles() {
 		os.MkdirAll(outputDir, 0755)
 	}
 
+	server.outputDirectory = outputDir
+	server.take = util.GetTake(server.outputDirectory)
+}
+
+func (server *JackServer) PrepareOutputFiles() {
+	server.prepareOutputDirectory()
+
 	for _, channel := range server.profile.Channels {
 		portNumbers := make([]string, len(channel.Ports))
 
@@ -267,16 +275,18 @@ func (server *JackServer) PrepareOutputFiles() {
 			portNumbers[i] = fmt.Sprintf("%02d", channel)
 		}
 
+		fileName := fmt.Sprintf("%s_channel%s_%s.wav", server.take, strings.Join(portNumbers, "-"), channel.ChannelName)
+
 		outputFile := OutputFile{
 			// TODO: support multiple takes
-			FileName:     fmt.Sprintf("%s_channel%s_%s.wav", take, strings.Join(portNumbers, "-"), channel.ChannelName),
+			FileName:     fileName,
+			FilePath:     path.Join(server.outputDirectory, fileName),
 			InputPorts:   make([]*Port, len(channel.Ports)),
 			ChannelCount: len(channel.Ports),
 			BitDepth:     server.profile.Output.BitDepth,
 			SampleRate:   server.profile.AudioServer.SampleRate,
+			FileOpen:     false,
 		}
-
-		outputFile.FilePath = path.Join(outputDir, outputFile.FileName)
 
 		slog.Info("Creating output file " + outputFile.FilePath)
 
@@ -302,6 +312,8 @@ func (server *JackServer) PrepareOutputFiles() {
 				}
 			}
 		}
+
+		outputFile.FileOpen = true
 
 		server.outputFiles = append(server.outputFiles, &outputFile)
 	}

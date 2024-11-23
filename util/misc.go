@@ -43,6 +43,32 @@ func DumpRunes(start int, count int) {
 	}
 }
 
+func GetTake(outputDir string) string {
+	entries, _ := os.ReadDir(outputDir)
+
+	take := byte('A')
+
+out:
+	for {
+		for _, entry := range entries {
+			name := entry.Name()
+
+			// skip directories or non-wav files
+			if entry.IsDir() || !strings.HasSuffix(name, ".wav") {
+				continue
+			}
+
+			if strings.HasPrefix(name, fmt.Sprintf("%s_channel", string(take))) {
+				take += 1
+				continue out
+			}
+		}
+		break out
+	}
+
+	return string(take)
+}
+
 func FileExists(path string) bool {
 	// if an error occurred or its a directory, we throw up
 	if stat, err := os.Stat(path); err != nil || stat.IsDir() {
