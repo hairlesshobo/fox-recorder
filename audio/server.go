@@ -31,6 +31,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hairlesshobo/go-jack"
 )
@@ -158,6 +159,7 @@ func (server *JackServer) StopServer() {
 
 func (server *JackServer) Connect() {
 	reaper.Register()
+
 	slog.Info("Connecting to JACK server")
 
 	var jackStatus int
@@ -172,6 +174,16 @@ func (server *JackServer) Connect() {
 }
 
 func (server *JackServer) Disconnect() {
+	// todo: need to make sure this can only be called once
+	// disconnect all ports
+	server.DisconnectAllPorts()
+
+	// deactivate
+	// server.DeactivateClient()
+
+	slog.Info("Allowing jack to finish processing")
+	time.Sleep(1 * time.Second)
+
 	slog.Info("Disconnecting from JACK server")
 
 	jackStatus := server.jackClient.Close()
@@ -183,6 +195,31 @@ func (server *JackServer) Disconnect() {
 
 	slog.Info("JACK server disconnected")
 	reaper.Done()
+}
+
+func (server *JackServer) DisconnectAllPorts() {
+	slog.Info("Disconnecting all audio ports")
+
+	for _, port := range server.GetAllPorts() {
+		if !port.connected {
+			continue
+		}
+
+		var inName string
+		var outName string
+
+		if port.portDirection == In {
+			inName = port.jackName
+			outName = fmt.Sprintf("%s:%s", server.clientName, port.myName)
+		} else if port.portDirection == Out {
+			inName = fmt.Sprintf("%s:%s", server.clientName, port.myName)
+			outName = port.jackName
+		}
+
+		slog.Debug(fmt.Sprintf("Disconnected port %s from port %s", inName, outName))
+		server.jackClient.Disconnect(inName, outName)
+		port.connected = false
+	}
 }
 
 func (server *JackServer) GetAllPorts() []*Port {
@@ -314,12 +351,24 @@ func (server *JackServer) GetSampleRate() uint32 {
 }
 
 func (server *JackServer) ActivateClient() {
+	slog.Info("Activating jack client")
+
 	// activate client
 	if code := server.jackClient.Activate(); code != 0 {
 		slog.Error(fmt.Sprintf("Failed to activate client: %s", jack.StrError(code)))
 		return
 	}
 }
+
+// func (server *JackServer) DeactivateClient() {
+// 	slog.Info("Deactivating jack client")
+
+// 	// deactivate client
+// 	if code := server.jackClient.Deactivate(); code != 0 {
+// 		slog.Error(fmt.Sprintf("Failed to deactivate client: %s", jack.StrError(code)))
+// 		return
+// 	}
+// }
 
 func (server *JackServer) ConnectPorts(connectInput bool, connectOutput bool) {
 	slog.Info("Connecting audio ports")

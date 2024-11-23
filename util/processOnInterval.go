@@ -28,9 +28,8 @@ import (
 )
 
 func ProcessOnInterval(milliseconds int, process func()) {
+	reaper.Register()
 	go func() {
-		reaper.Register()
-
 		process()
 
 		t := time.NewTicker(time.Duration(milliseconds) * time.Millisecond)

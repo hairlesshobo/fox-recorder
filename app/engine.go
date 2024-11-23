@@ -25,6 +25,7 @@ package app
 import (
 	"fmt"
 	"log/slog"
+	"os"
 
 	"fox-audio/audio"
 	"fox-audio/display"
@@ -55,21 +56,21 @@ func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool,
 
 	initStatistics()
 
-	// f, err := os.Create("/Users/flip/projects/personal/fox-recorder/fox.log")
+	f, err := os.Create("/Users/flip/projects/personal/fox-recorder/fox.log")
 
-	// if err != nil {
-	// 	panic(err)
-	// }
+	if err != nil {
+		panic(err)
+	}
 
-	// handler := slog.NewTextHandler(f, &slog.HandlerOptions{
-	// 	Level: slog.LevelDebug,
-	// })
-	// logger := slog.New(handler)
-	// slog.SetDefault(logger)
-
-	handler := shared.NewTuiLogHandler(displayHandle.tui, slog.LevelDebug)
+	handler := slog.NewTextHandler(f, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	})
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
+
+	// handler := shared.NewTuiLogHandler(displayHandle.tui, slog.LevelDebug)
+	// logger := slog.New(handler)
+	// slog.SetDefault(logger)
 
 	shared.HijackLogging()
 	shared.EnableSlogLogging()
@@ -85,7 +86,7 @@ func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool,
 		})
 
 		audioServer.StartServer()
-		reaper.Callback(audioServer.StopServer)
+		reaper.Callback("stop jack server", audioServer.StopServer)
 
 		ports = audioServer.GetInputPorts()
 		displayHandle.tui.SetChannelCount(len(ports))
@@ -93,7 +94,7 @@ func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool,
 		displayHandle.tui.SetTransportStatus(0)
 
 		audioServer.Connect()
-		reaper.Callback(audioServer.Disconnect)
+		reaper.Callback("disconnect jack server", audioServer.Disconnect)
 
 		// only register input ports, for now
 		audioServer.RegisterPorts(true, false)

@@ -23,19 +23,25 @@
 package reaper
 
 import (
+	"log/slog"
 	"slices"
 	"sync"
 )
 
 var (
 	reapRequested   chan bool
-	reaperCallbacks []func()
+	reaperCallbacks []callback
 	reaperWaitgroup sync.WaitGroup
 )
 
+type callback struct {
+	name         string
+	callbackFunc func()
+}
+
 func init() {
 	reapRequested = make(chan bool, 1)
-	reaperCallbacks = make([]func(), 0)
+	reaperCallbacks = make([]callback, 0)
 	reaperWaitgroup = sync.WaitGroup{}
 }
 
@@ -51,13 +57,17 @@ func Reap() {
 		slices.Reverse(callbacksReversed)
 
 		for _, callback := range callbacksReversed {
-			callback()
+			slog.Info("reaper: calling reap callback for " + callback.name)
+			callback.callbackFunc()
 		}
 	}
 }
 
-func Callback(callback func()) {
-	reaperCallbacks = append(reaperCallbacks, callback)
+func Callback(name string, callbackFunc func()) {
+	reaperCallbacks = append(reaperCallbacks, callback{
+		name:         name,
+		callbackFunc: callbackFunc,
+	})
 }
 
 func Register() {

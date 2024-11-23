@@ -71,6 +71,7 @@ func Execute() {
 	// 	Level: slog.Level(slog.LevelDebug),
 	// }))
 	// slog.SetDefault(logger)
+
 	// ctx := context.WithValue(context.TODO(), model.ImportConfigContext, config)
 	// err := rootCmd.ExecuteContext(ctx)
 

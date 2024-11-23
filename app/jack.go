@@ -43,20 +43,20 @@ func init() {
 }
 
 func jackError(message string) {
-	slog.Error("JACK: " + message)
+	slog.Error("JACK client: " + message)
 }
 
 func jackInfo(message string) {
-	slog.Info("JACK: " + message)
+	slog.Info("JACK client: " + message)
 }
 
 func jackShutdown(server *audio.JackServer) {
-	slog.Info("JACK connection shutting down")
+	slog.Info("JACK client: connection is shutting down")
 	server.StopServer()
 }
 
 func jackXrun() int {
-	slog.Error("xrun")
+	slog.Error("JACK client: xrun occurred")
 
 	return 0
 }
