@@ -25,7 +25,6 @@ package app
 import (
 	"fmt"
 	"log/slog"
-	"os"
 
 	"fox-audio/audio"
 	"fox-audio/display"
@@ -56,21 +55,21 @@ func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool,
 
 	initStatistics()
 
-	f, err := os.Create("/Users/flip/projects/personal/fox-recorder/fox.log")
+	// f, err := os.Create("/Users/flip/projects/personal/fox-recorder/fox.log")
 
-	if err != nil {
-		panic(err)
-	}
+	// if err != nil {
+	// 	panic(err)
+	// }
 
-	handler := slog.NewTextHandler(f, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	})
-	logger := slog.New(handler)
-	slog.SetDefault(logger)
-
-	// handler := shared.NewTuiLogHandler(displayHandle.tui, slog.LevelDebug)
+	// handler := slog.NewTextHandler(f, &slog.HandlerOptions{
+	// 	Level: slog.LevelDebug,
+	// })
 	// logger := slog.New(handler)
 	// slog.SetDefault(logger)
+
+	handler := shared.NewTuiLogHandler(displayHandle.tui, slog.LevelDebug)
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
 
 	shared.HijackLogging()
 	shared.EnableSlogLogging()
@@ -107,6 +106,7 @@ func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool,
 		audioServer.ActivateClient()
 
 		audioServer.PrepareOutputFiles()
+		reaper.Callback("close files", audioServer.CloseOutputFiles)
 		outputFiles = audioServer.GetOutputFiles()
 		startDiskWriter(profile)
 
@@ -115,6 +115,8 @@ func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool,
 		displayHandle.tui.SetAudioFormat(fmt.Sprintf("%0.1fKHz", float64(audioServer.GetSampleRate())/1000.0))
 
 		slog.Info("Input ports connected")
+
+		displayHandle.tui.SetTransportStatus(2)
 	}
 
 	// TODO: connect port(s)
@@ -124,7 +126,6 @@ func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool,
 		displayHandle.tui.SetChannelCount(simulateChannelCount)
 		startSimulation(simulateFreezeMeters, simulateChannelCount)
 	}
-	// displayHandle.tui.WaitForShutdown()
-	// audioServer.StopServer()
+
 	reaper.Wait()
 }

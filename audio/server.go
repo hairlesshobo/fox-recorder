@@ -25,14 +25,19 @@ package audio
 import (
 	"bufio"
 	"fmt"
-	"fox-audio/model"
-	"fox-audio/reaper"
 	"log/slog"
+	"os"
 	"os/exec"
+	"path"
 	"strconv"
 	"strings"
 	"time"
 
+	"fox-audio/model"
+	"fox-audio/reaper"
+	"fox-audio/util"
+
+	"github.com/go-audio/wav"
 	"github.com/hairlesshobo/go-jack"
 )
 
@@ -243,6 +248,18 @@ func (server *JackServer) GetOutputFiles() []*OutputFile {
 func (server *JackServer) PrepareOutputFiles() {
 	take := "A"
 
+	outputDir, err := util.ResolveHomeDirPath(time.Now().Format(server.profile.Output.Directory))
+	if err != nil {
+		slog.Error("Failed to resolve home user dir: " + err.Error())
+		reaper.Reap()
+		return
+	}
+
+	if !util.DirectoryExists(outputDir) {
+		slog.Info("Creating output directory: " + outputDir)
+		os.MkdirAll(outputDir, 0755)
+	}
+
 	for _, channel := range server.profile.Channels {
 		portNumbers := make([]string, len(channel.Ports))
 
@@ -252,15 +269,30 @@ func (server *JackServer) PrepareOutputFiles() {
 
 		outputFile := OutputFile{
 			// TODO: support multiple takes
-			FileName:   fmt.Sprintf("%s_channel%s_%s.wav", take, strings.Join(portNumbers, "-"), channel.ChannelName),
-			InputPorts: make([]*Port, 0),
+			FileName:     fmt.Sprintf("%s_channel%s_%s.wav", take, strings.Join(portNumbers, "-"), channel.ChannelName),
+			InputPorts:   make([]*Port, len(channel.Ports)),
+			ChannelCount: len(channel.Ports),
+			BitDepth:     server.profile.Output.BitDepth,
+			SampleRate:   server.profile.AudioServer.SampleRate,
 		}
 
-		for _, channelPort := range channel.Ports {
+		outputFile.FilePath = path.Join(outputDir, outputFile.FileName)
+
+		slog.Info("Creating output file " + outputFile.FilePath)
+
+		var err error
+		outputFile.FileHandle, err = os.Create(outputFile.FilePath)
+		if err != nil {
+			slog.Error("error creating %s: %s", outputFile.FilePath, err)
+		}
+
+		outputFile.Encoder = wav.NewEncoder(outputFile.FileHandle, outputFile.SampleRate, outputFile.BitDepth, len(channel.Ports), 1)
+
+		for channelNum, channelPort := range channel.Ports {
 			jackPort := server.findJackPort(fmt.Sprintf("system:capture_%d", channelPort))
 
 			if jackPort != nil {
-				outputFile.InputPorts = append(outputFile.InputPorts, jackPort)
+				outputFile.InputPorts[channelNum] = jackPort
 
 				success := jackPort.AllocateBuffer(int(float64(server.profile.AudioServer.SampleRate) * server.profile.AudioServer.BufferSizeSeconds))
 
@@ -348,6 +380,12 @@ func (server *JackServer) SetXrunCallback(callback func() int) {
 
 func (server *JackServer) GetSampleRate() uint32 {
 	return server.jackClient.GetSampleRate()
+}
+
+func (server *JackServer) CloseOutputFiles() {
+	for _, outputFile := range server.outputFiles {
+		outputFile.Close()
+	}
 }
 
 func (server *JackServer) ActivateClient() {

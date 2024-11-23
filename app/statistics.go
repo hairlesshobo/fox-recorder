@@ -24,10 +24,10 @@ package app
 
 import (
 	"fmt"
-	"fox-audio/util"
-	"log/slog"
 	"math"
 	"os"
+
+	"fox-audio/util"
 )
 
 var (
@@ -82,9 +82,7 @@ func initStatistics() {
 
 		bufferAvg := sum / float64(count)
 
-		slog.Info(fmt.Sprintf("buffer: %0.2f%%", bufferAvg))
 		displayHandle.tui.SetBufferUtilization(int(math.Round(bufferAvg * 100.0)))
-
-		// util.TraceLog(fmt.Sprintf("Disk total: %d B, Disk Used: %d B, Disk free: %d B, used %0.2f%%", diskInfo.Size, diskInfo.Used, diskInfo.Free, diskInfo.UsedPct))
+		// slog.Info(fmt.Sprintf("buffer: %0.2f%%", bufferAvg))
 	})
 }

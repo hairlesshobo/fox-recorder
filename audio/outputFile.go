@@ -22,12 +22,22 @@
 // =================================================================================
 package audio
 
+import (
+	"os"
+
+	"github.com/go-audio/audio"
+	"github.com/go-audio/wav"
+)
+
 type OutputFile struct {
-	FileName   string
-	InputPorts []*Port
-	// Encoder
-	// FileHandle
-	// ChannelCount
+	FilePath     string
+	FileName     string
+	InputPorts   []*Port
+	FileHandle   *os.File
+	Encoder      *wav.Encoder
+	ChannelCount int
+	BitDepth     int
+	SampleRate   int
 }
 
 func (of *OutputFile) GetWriteBuffers() []chan float32 {
@@ -38,4 +48,19 @@ func (of *OutputFile) GetWriteBuffers() []chan float32 {
 	}
 
 	return buffers
+}
+
+func (of *OutputFile) Close() {
+	if of.Encoder != nil {
+		of.Encoder.Close()
+	}
+
+	if of.FileHandle != nil {
+		of.FileHandle.Close()
+	}
+
+}
+
+func (of *OutputFile) Write(buf *audio.IntBuffer) error {
+	return of.Encoder.Write(buf)
 }

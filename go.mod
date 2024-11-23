@@ -14,6 +14,10 @@ require (
 require (
 	code.rocketnine.space/tslocum/cbind v0.1.5 // indirect
 	github.com/gdamore/encoding v1.0.0 // indirect
+	github.com/go-audio/audio v1.0.0 // indirect
+	github.com/go-audio/riff v1.0.0 // indirect
+	github.com/go-audio/transforms v0.0.0-20180121090939-51830ccc35a5 // indirect
+	github.com/go-audio/wav v1.1.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-runewidth v0.0.15 // indirect

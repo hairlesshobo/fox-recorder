@@ -52,6 +52,14 @@ func FileExists(path string) bool {
 	return true
 }
 
+func DirectoryExists(testDir string) bool {
+	if stat, err := os.Stat(testDir); err != nil || !stat.IsDir() {
+		return false
+	}
+
+	return true
+}
+
 func ResolveHomeDirPath(testPath string) (string, error) {
 	if strings.HasPrefix(testPath, "~/") {
 		// TODO: make this a shared function

@@ -24,10 +24,14 @@ package app
 
 import (
 	"fmt"
-	"fox-audio/model"
-	"fox-audio/reaper"
 	"log/slog"
 	"time"
+
+	"fox-audio/model"
+	"fox-audio/reaper"
+
+	"github.com/go-audio/audio"
+	"github.com/go-audio/transforms"
 )
 
 func startDiskWriter(profile *model.Profile) {
@@ -66,12 +70,30 @@ out:
 				writeBuffers := channel.GetWriteBuffers()
 
 				if len(writeBuffers[0]) > requiredSamples {
-					slog.Info("Got enough samples!")
+					slog.Debug("Writing samples to file")
 
-					// TODO: write file
+					// TODO: Need to make sure the file isn't closed
+
 					for _, writeBuffer := range writeBuffers {
 						// TODO: do i want to limit this to the requiredSampels count or just drain what it has left?
-						getSamplesFromBuffer(requiredSamples, writeBuffer)
+						wavFormat := &audio.Format{
+							NumChannels: int(channel.ChannelCount),
+							SampleRate:  int(channel.SampleRate),
+						}
+
+						samples := getSamplesFromBuffer(requiredSamples, writeBuffer)
+
+						fBuf := &audio.Float32Buffer{
+							Data:   samples,
+							Format: wavFormat,
+						}
+
+						transforms.PCMScaleF32(fBuf, profile.Output.BitDepth)
+
+						iBuf := fBuf.AsIntBuffer()
+
+						// TODO: add interleave support
+						channel.Write(iBuf)
 					}
 				}
 			}
