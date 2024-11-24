@@ -44,9 +44,8 @@ func getSamplesFromBuffer(sampleCount int, writeBuffer chan float32) []float32 {
 	currentBufferLen := len(writeBuffer)
 
 	if currentBufferLen < sampleCount {
-		// TODO: track this error
 		// this should never happen
-		slog.Warn(fmt.Sprintf("Requested %d samples but only have %d", sampleCount, currentBufferLen))
+		slog.Error(fmt.Sprintf("Requested %d samples but only have %d", sampleCount, currentBufferLen))
 	}
 
 	samples := make([]float32, sampleCount)

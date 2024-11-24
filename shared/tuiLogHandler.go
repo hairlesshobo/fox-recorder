@@ -30,23 +30,29 @@ import (
 )
 
 type TuiLogHandler struct {
-	level slog.Level
-	tui   *display.Tui
+	level         slog.Level
+	tui           *display.Tui
+	errorCallback func(string)
+}
+
+func NewTuiLogHandler(out *display.Tui, level slog.Level, errorCallback func(string)) *TuiLogHandler {
+	h := &TuiLogHandler{
+		level:         level,
+		tui:           out,
+		errorCallback: errorCallback,
+	}
+
+	return h
 }
 
 func (h *TuiLogHandler) Handle(ctx context.Context, r slog.Record) error {
 	h.tui.WriteLog(fmt.Sprintf("[%s] %s	", r.Level.String(), r.Message))
 
-	return nil
-}
-
-func NewTuiLogHandler(out *display.Tui, level slog.Level) *TuiLogHandler {
-	h := &TuiLogHandler{
-		level: level,
-		tui:   out,
+	if r.Level == slog.LevelError {
+		h.errorCallback(r.Message)
 	}
 
-	return h
+	return nil
 }
 
 func (h *TuiLogHandler) Enabled(ctx context.Context, level slog.Level) bool {

@@ -68,6 +68,8 @@ func initStatistics(profile *model.Profile) chan bool {
 
 		displayHandle.tui.SetAudioLoad(int(avgAudioLoad * 100.0))
 		util.TraceLog(fmt.Sprintf("Idle time: %0.0f us, Process time: %0.0f us, load %0.3f%%", idleTimeAvg, processTimeAvg, avgAudioLoad))
+
+		// TODO: calculate disk write load (time writing / time idle)
 	})
 
 	// disk space utilization
@@ -75,7 +77,20 @@ func initStatistics(profile *model.Profile) chan bool {
 		// TODO: this should point to recording directory
 		wd, _ := os.Getwd()
 
-		usedBytes := (stats.samplesProcessed * uint64(profile.Output.BitDepth)) / 8
+		channelCount := 0
+		for _, channel := range profile.Channels {
+			channelCount += len(channel.Ports)
+		}
+
+		fileCount := len(profile.Channels)
+
+		// get bytes read from jack
+		usedBytesRaw := (stats.samplesProcessed * uint64(profile.Output.BitDepth)) / 8
+		usedBytesRaw *= uint64(channelCount)
+
+		// add 44 for each wav file header
+
+		usedBytes := usedBytesRaw + (uint64(fileCount) * 44)
 
 		diskInfo := util.GetDiskSpace(wd)
 		displayHandle.tui.SetDiskUsage(int(math.Round(diskInfo.UsedPct * 100.0)))

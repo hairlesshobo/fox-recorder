@@ -27,7 +27,7 @@ import (
 	"log/slog"
 	"time"
 
-	"fox-audio/custom"
+	"fox-audio/display/custom"
 	"fox-audio/display/theme"
 	"fox-audio/model"
 	"fox-audio/reaper"
@@ -78,19 +78,12 @@ type Tui struct {
 	app             *cview.Application
 	shutdownChannel chan bool
 
+	errorCount int
 	// sessionName           string
 	// profileName           string
 	// jackServerStatus      int    // 0 = not running, 1 = running, 2 = running with warnings, 3 = terminated
-	// transportStatus       string // 0 = pause, 1 = playing, 2 = recording
-	// bitDepth              int
-	// sampleRate            int
 	// armedChannelCount     int
 	// connectedChannelCount int
-	// diskTotal             int64
-	// diskUsed              int64
-	// diskRremainingTime    int64
-	// recordingDuration     int64
-	// bufferUsagePct        float64
 	// diskPerformancePct    float64
 
 	appGrid    *cview.Grid
@@ -116,6 +109,7 @@ type Tui struct {
 func NewTui() *Tui {
 	tui := &Tui{
 		shutdownChannel: make(chan bool, 1),
+		errorCount:      0,
 	}
 
 	return tui
@@ -158,8 +152,6 @@ func (tui *Tui) Initalize() {
 	statusGrid.AddItem(tui.tvPosition.GetGrid(), 1, statusColOffset, 1, 1, 0, 0, false)
 	statusGrid.AddItem(tui.tvFormat.GetGrid(), 2, statusColOffset, 1, 1, 0, 0, false)
 	statusGrid.AddItem(tui.tvFileSize.GetGrid(), 3, statusColOffset, 1, 1, 0, 0, false)
-
-	// TODO: implement error counting
 	statusGrid.AddItem(tui.tvErrorCount.GetGrid(), 4, statusColOffset, 1, 1, 0, 0, false)
 
 	tui.meterDiskSpace = custom.NewStatusMeter(headerWidth, "Disk Space", 0, "%")
@@ -399,4 +391,13 @@ func (tui *Tui) SetChannelCount(channelCount int) {
 
 func (tui *Tui) WriteLog(message string) {
 	tui.tvLogs.Write([]byte(fmt.Sprintf("[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), message)))
+}
+
+func (tui *Tui) IncrementErrorCount() {
+	tui.errorCount++
+	tui.tvErrorCount.SetCurrentValue(fmt.Sprintf("%d", tui.errorCount))
+
+	if tui.errorCount > 0 {
+		tui.tvErrorCount.SetColor(theme.Red)
+	}
 }

@@ -76,7 +76,9 @@ func ConfigureFileLogger() {
 }
 
 func ConfigureTuiLogger() {
-	handler := shared.NewTuiLogHandler(displayHandle.tui, slog.LevelDebug)
+	handler := shared.NewTuiLogHandler(displayHandle.tui, slog.LevelDebug, func(message string) {
+		displayHandle.tui.IncrementErrorCount()
+	})
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
 

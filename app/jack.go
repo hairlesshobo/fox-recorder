@@ -106,8 +106,7 @@ func jackProcess(nframes uint32) int {
 					}
 
 				} else {
-					// TODO: track these errors
-					slog.Warn("No space left in write buffer!!")
+					slog.Error("No space left in write buffer!!")
 				}
 			}
 		} else {
