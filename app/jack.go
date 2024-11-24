@@ -39,11 +39,15 @@ var (
 
 func init() {
 	// TODO: does this need to change - do we need to track this channel fill ratio too?
-	cycleDoneChannel = make(chan bool, 10)
+	cycleDoneChannel = make(chan bool, 30)
 }
 
 func jackError(message string) {
-	slog.Error("JACK client: " + message)
+	if reaper.Reaped() {
+		slog.Warn("JACK client: " + message)
+	} else {
+		slog.Error("JACK client: " + message)
+	}
 }
 
 func jackInfo(message string) {
@@ -88,8 +92,6 @@ func jackProcess(nframes uint32) int {
 		}
 
 		if !reaper.Reaped() {
-			stats.samplesProcessed += uint64(nframes)
-
 			signalLevels[portNum] = &model.SignalLevel{
 				Instant: int(util.AmplitudeToDb(sigLevel)),
 			}
@@ -101,6 +103,8 @@ func jackProcess(nframes uint32) int {
 			writeBuffer := port.GetWriteBuffer()
 			if cap(writeBuffer) > 0 {
 				if (len(writeBuffer) + int(nframes)) < cap(writeBuffer) {
+					stats.samplesProcessed += uint64(nframes)
+
 					for _, sample := range samplesIn {
 						writeBuffer <- float32(sample)
 					}
@@ -117,7 +121,9 @@ func jackProcess(nframes uint32) int {
 
 	displayHandle.tui.UpdateSignalLevels(signalLevels)
 
-	cycleDoneChannel <- true
+	if !reaper.Reaped() {
+		cycleDoneChannel <- true
+	}
 
 	// audio load statistics
 	stats.jackProcessLastEndTime = time.Now().UnixMicro()

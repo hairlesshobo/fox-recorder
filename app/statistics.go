@@ -24,7 +24,6 @@ package app
 
 import (
 	"fmt"
-	"log/slog"
 	"math"
 	"time"
 
@@ -54,11 +53,11 @@ type statistics struct {
 
 func initStatistics(profile *model.Profile) chan bool {
 	stats = statistics{
-		jackProcessElapsedChan: make(chan int64, 30),
-		jackProcessIdleChan:    make(chan int64, 30),
+		jackProcessElapsedChan: make(chan int64, 5),
+		jackProcessIdleChan:    make(chan int64, 5),
 
-		diskProcessElapsedChan: make(chan int64, 30),
-		diskProcessIdleChan:    make(chan int64, 30),
+		diskProcessElapsedChan: make(chan int64, 5),
+		diskProcessIdleChan:    make(chan int64, 5),
 
 		shutdownChan:     make(chan bool, 5),
 		samplesProcessed: 0,
@@ -70,15 +69,109 @@ func initStatistics(profile *model.Profile) chan bool {
 		channels += len(channel.Ports)
 	}
 
-	// audio engine load calculations
-	processOnInterval("audio engine load stats", stats.shutdownChan, 250, func() {
+	// // audio engine load calculations
+	// processOnInterval("audio engine load stats", stats.shutdownChan, 100, func() {
+	// 	jackIdleTimeAvg := util.GetChanAverage(stats.jackProcessIdleChan)
+	// 	jackProcessTimeAvg := util.GetChanAverage(stats.jackProcessElapsedChan)
+	// 	jackAvgLoad := jackProcessTimeAvg / jackIdleTimeAvg
+
+	// 	if !math.IsNaN(jackAvgLoad) {
+	// 		displayHandle.tui.SetAudioLoad(int(jackAvgLoad * 100.0))
+	// 		util.TraceLog(fmt.Sprintf("jack Idle time: %0.0f us, Process time: %0.0f us, load %0.3f%%", jackIdleTimeAvg, jackProcessTimeAvg, jackAvgLoad*100.0))
+	// 	}
+
+	// 	// cycle buffer
+	// 	cycleBuffer := float64(len(cycleDoneChannel)) / float64(cap(cycleDoneChannel))
+
+	// 	if !math.IsNaN(cycleBuffer) {
+	// 		displayHandle.tui.SetCycleBuffer(int(cycleBuffer * 100.0))
+	// 		util.TraceLog(fmt.Sprintf("cycle buffer: %03f%%", cycleBuffer))
+	// 	}
+
+	// 	// calculate disk load
+	// 	diskIdleTimeAvg := util.GetChanAverage(stats.diskProcessIdleChan)
+	// 	diskWriteTimeAvg := util.GetChanAverage(stats.diskProcessElapsedChan)
+	// 	diskAvgLoad := diskWriteTimeAvg / diskIdleTimeAvg
+
+	// 	if !math.IsNaN(diskAvgLoad) {
+	// 		displayHandle.tui.SetDiskLoad(int(diskAvgLoad * 100.0))
+	// 		util.TraceLog(fmt.Sprintf("disk Idle time: %0.0f us, Process time: %0.0f us, load %0.3f%%", diskIdleTimeAvg, diskWriteTimeAvg, diskAvgLoad*100.0))
+
+	// 		// TODO: calculate disk write load (time writing / time idle)
+	// 	}
+	// })
+
+	// disk space utilization & session size
+	processOnInterval("disk space & session size stats", stats.shutdownChan, 1000, func() {
+		// get bytes read from jack
+		usedBytesRaw := (stats.samplesProcessed * uint64(profile.Output.BitDepth)) / 8
+
+		// add 44 for each wav file header
+		usedBytes := usedBytesRaw + (uint64(len(profile.Channels)) * 44)
+		displayHandle.tui.SetSessionSize(usedBytes)
+
+		diskInfo := util.GetDiskSpace(profile.Output.Directory)
+		displayHandle.tui.SetDiskUsage(int(math.Round(diskInfo.UsedPct * 100.0)))
+
+		util.TraceLog(fmt.Sprintf("Disk total: %d B, Disk Used: %d B, Disk free: %d B, used %0.2f%%", diskInfo.Size, diskInfo.Used, diskInfo.Free, diskInfo.UsedPct*100.0))
+	})
+
+	// // buffer utilization
+	// processOnInterval("buffer stats", stats.shutdownChan, 250, func() {
+	// 	sum := float64(0.0)
+	// 	count := 0
+
+	// 	for _, port := range ports {
+	// 		buffer := port.GetWriteBuffer()
+
+	// 		sum += float64(len(buffer)) / float64(cap(buffer))
+	// 		count += 1
+	// 	}
+
+	// 	bufferAvg := sum / float64(count)
+
+	// 	if !math.IsNaN(bufferAvg) {
+	// 		displayHandle.tui.SetBufferUtilization(int(math.Round(bufferAvg * 100.0)))
+	// 		util.TraceLog(fmt.Sprintf("buffer: %0.2f%%", bufferAvg*100.0))
+	// 	}
+	// })
+
+	// processOnInterval("recording duration stats", stats.shutdownChan, 100, func() {
+	// 	duration := float64(stats.samplesProcessed) / float64(profile.AudioServer.SampleRate)
+	// 	displayHandle.tui.SetDuration(duration)
+	// })
+
+	processOnInterval("combined stats", stats.shutdownChan, 100, func() {
+		// recording duration
+		duration := float64(stats.samplesProcessed) / float64(profile.AudioServer.SampleRate)
+		displayHandle.tui.SetDuration(duration)
+
+		// buffer utilization
+		bufferSum := float64(0.0)
+		bufferCount := 0
+
+		for _, port := range ports {
+			buffer := port.GetWriteBuffer()
+
+			bufferSum += float64(len(buffer)) / float64(cap(buffer))
+			bufferCount += 1
+		}
+
+		bufferAvg := bufferSum / float64(bufferCount)
+
+		if !math.IsNaN(bufferAvg) {
+			displayHandle.tui.SetBufferUtilization(int(math.Round(bufferAvg * 100.0)))
+			util.TraceLog(fmt.Sprintf("buffer: %0.2f%%", bufferAvg*100.0))
+		}
+
+		// audio engine load
 		jackIdleTimeAvg := util.GetChanAverage(stats.jackProcessIdleChan)
 		jackProcessTimeAvg := util.GetChanAverage(stats.jackProcessElapsedChan)
 		jackAvgLoad := jackProcessTimeAvg / jackIdleTimeAvg
 
 		if !math.IsNaN(jackAvgLoad) {
 			displayHandle.tui.SetAudioLoad(int(jackAvgLoad * 100.0))
-			util.TraceLog(fmt.Sprintf("jack Idle time: %0.0f us, Process time: %0.0f us, load %0.3f%%", jackIdleTimeAvg, jackProcessTimeAvg, jackAvgLoad))
+			util.TraceLog(fmt.Sprintf("jack Idle time: %0.0f us, Process time: %0.0f us, load %0.3f%%", jackIdleTimeAvg, jackProcessTimeAvg, jackAvgLoad*100.0))
 		}
 
 		// cycle buffer
@@ -86,68 +179,24 @@ func initStatistics(profile *model.Profile) chan bool {
 
 		if !math.IsNaN(cycleBuffer) {
 			displayHandle.tui.SetCycleBuffer(int(cycleBuffer * 100.0))
-			slog.Debug(fmt.Sprintf("cycle buffer: %03f%%", cycleBuffer))
+			util.TraceLog(fmt.Sprintf("cycle buffer: %03f%%", cycleBuffer))
 		}
 
 		// calculate disk load
-		diskIdleTimeAvg := util.GetChanAverage(stats.diskProcessIdleChan)
-		diskWriteTimeAvg := util.GetChanAverage(stats.diskProcessElapsedChan)
-		diskAvgLoad := diskWriteTimeAvg / diskIdleTimeAvg
+		if len(stats.diskProcessIdleChan) == cap(stats.diskProcessIdleChan) &&
+			len(stats.diskProcessElapsedChan) == cap(stats.diskProcessElapsedChan) {
 
-		if !math.IsNaN(diskAvgLoad) {
-			displayHandle.tui.SetDiskLoad(int(diskAvgLoad * 100.0))
-			slog.Debug(fmt.Sprintf("disk Idle time: %0.0f us, Process time: %0.0f us, load %0.3f%%", diskIdleTimeAvg, diskWriteTimeAvg, diskAvgLoad))
+			diskIdleTimeAvg := util.GetChanAverage(stats.diskProcessIdleChan)
+			diskWriteTimeAvg := util.GetChanAverage(stats.diskProcessElapsedChan)
+			diskAvgLoad := diskWriteTimeAvg / diskIdleTimeAvg
 
-			// TODO: calculate disk write load (time writing / time idle)
+			if !math.IsNaN(diskAvgLoad) {
+				displayHandle.tui.SetDiskLoad(int(diskAvgLoad * 100.0))
+				util.TraceLog(fmt.Sprintf("disk Idle time: %0.0f us, Process time: %0.0f us, load %0.3f%%", diskIdleTimeAvg, diskWriteTimeAvg, diskAvgLoad*100.0))
+
+				// TODO: calculate disk write load (time writing / time idle)
+			}
 		}
-	})
-
-	// disk space utilization & session size
-	processOnInterval("disk space & session size stats", stats.shutdownChan, 1000, func() {
-		channelCount := 0
-		for _, channel := range profile.Channels {
-			channelCount += len(channel.Ports)
-		}
-
-		fileCount := len(profile.Channels)
-
-		// get bytes read from jack
-		usedBytesRaw := (stats.samplesProcessed * uint64(profile.Output.BitDepth)) / 8
-		usedBytesRaw *= uint64(channelCount)
-
-		// add 44 for each wav file header
-		usedBytes := usedBytesRaw + (uint64(fileCount) * 44)
-		displayHandle.tui.SetSessionSize(usedBytes)
-
-		diskInfo := util.GetDiskSpace(profile.Output.Directory)
-		displayHandle.tui.SetDiskUsage(int(math.Round(diskInfo.UsedPct * 100.0)))
-
-		util.TraceLog(fmt.Sprintf("Disk total: %d B, Disk Used: %d B, Disk free: %d B, used %0.2f%%", diskInfo.Size, diskInfo.Used, diskInfo.Free, diskInfo.UsedPct))
-	})
-
-	// buffer utilization
-	processOnInterval("buffer stats", stats.shutdownChan, 200, func() {
-		sum := float64(0.0)
-		count := 0
-
-		for _, port := range ports {
-			buffer := port.GetWriteBuffer()
-
-			sum += float64(len(buffer)) / float64(cap(buffer))
-			count += 1
-		}
-
-		bufferAvg := sum / float64(count)
-
-		if !math.IsNaN(bufferAvg) {
-			displayHandle.tui.SetBufferUtilization(int(math.Round(bufferAvg * 100.0)))
-			util.TraceLog(fmt.Sprintf("buffer: %0.2f%%", bufferAvg))
-		}
-	})
-
-	processOnInterval("recording duration stats", stats.shutdownChan, 50, func() {
-		duration := float64(stats.samplesProcessed) / float64(profile.AudioServer.SampleRate)
-		displayHandle.tui.SetDuration(duration)
 	})
 
 	return stats.shutdownChan

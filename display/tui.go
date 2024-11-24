@@ -25,6 +25,7 @@ package display
 import (
 	"fmt"
 	"log/slog"
+	"math"
 	"time"
 
 	"fox-audio/display/custom"
@@ -48,7 +49,8 @@ const (
 	StatusStarting     = 3
 	StatusShuttingDown = 4
 
-	meterWidth = 4
+	meterWidth       = 4
+	samplesToAverage = 4
 )
 
 //
@@ -84,7 +86,10 @@ type Tui struct {
 	// jackServerStatus      int    // 0 = not running, 1 = running, 2 = running with warnings, 3 = terminated
 	// armedChannelCount     int
 	// connectedChannelCount int
-	// diskPerformancePct    float64
+	diskPerformance   []int
+	bufferUtilization []int
+	audioLoad         []int
+	cyleLoad          []int
 
 	appGrid    *cview.Grid
 	meters     []*custom.LevelMeter
@@ -110,8 +115,12 @@ type Tui struct {
 
 func NewTui() *Tui {
 	tui := &Tui{
-		shutdownChannel: make(chan bool, 1),
-		errorCount:      0,
+		shutdownChannel:   make(chan bool, 1),
+		errorCount:        0,
+		diskPerformance:   make([]int, samplesToAverage),
+		bufferUtilization: make([]int, samplesToAverage),
+		audioLoad:         make([]int, samplesToAverage),
+		cyleLoad:          make([]int, samplesToAverage),
 	}
 
 	return tui
@@ -332,7 +341,13 @@ func (tui *Tui) updateMeter(meter *custom.StatusMeter, value, warnPct, cautionPc
 }
 
 func (tui *Tui) SetAudioLoad(percent int) {
-	tui.updateMeter(tui.meterAudioLoad, percent, 20, 50)
+	tui.audioLoad = append(tui.audioLoad, percent)
+
+	if len(tui.audioLoad) > samplesToAverage {
+		tui.audioLoad = tui.audioLoad[1:]
+	}
+
+	tui.updateMeter(tui.meterAudioLoad, getAverage(tui.audioLoad), 20, 50)
 }
 
 func (tui *Tui) SetDiskUsage(percent int) {
@@ -340,15 +355,45 @@ func (tui *Tui) SetDiskUsage(percent int) {
 }
 
 func (tui *Tui) SetBufferUtilization(percent int) {
-	tui.updateMeter(tui.meterBuffer, percent, 50, 75)
+	tui.bufferUtilization = append(tui.bufferUtilization, percent)
+
+	if len(tui.bufferUtilization) > samplesToAverage {
+		tui.bufferUtilization = tui.bufferUtilization[1:]
+	}
+
+	tui.updateMeter(tui.meterBuffer, getAverage(tui.bufferUtilization), 50, 75)
 }
 
 func (tui *Tui) SetDiskLoad(percent int) {
-	tui.updateMeter(tui.meterDiskLoad, percent, 50, 75)
+	tui.diskPerformance = append(tui.diskPerformance, percent)
+
+	if len(tui.diskPerformance) > samplesToAverage {
+		tui.diskPerformance = tui.diskPerformance[1:]
+	}
+
+	tui.updateMeter(tui.meterDiskLoad, getAverage(tui.diskPerformance), 50, 75)
+}
+
+func getAverage(array []int) int {
+	sum := 0
+	count := 0
+
+	for i := 0; i < len(array); i++ {
+		sum += array[i]
+		count++
+	}
+
+	return int(math.Round(float64(sum) / float64(count)))
 }
 
 func (tui *Tui) SetCycleBuffer(percent int) {
-	tui.updateMeter(tui.meterCycleBuffer, percent, 20, 50)
+	tui.cyleLoad = append(tui.cyleLoad, percent)
+
+	if len(tui.cyleLoad) > samplesToAverage {
+		tui.cyleLoad = tui.cyleLoad[1:]
+	}
+
+	tui.updateMeter(tui.meterCycleBuffer, getAverage(tui.cyleLoad), 20, 50)
 }
 
 func (tui *Tui) SetChannelCount(channelCount int) {

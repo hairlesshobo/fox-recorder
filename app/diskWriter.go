@@ -25,13 +25,14 @@ package app
 import (
 	"fmt"
 	"log/slog"
+	"math"
 	"time"
 
 	"fox-audio/model"
 	"fox-audio/reaper"
+	"fox-audio/util"
 
 	"github.com/go-audio/audio"
-	"github.com/go-audio/transforms"
 )
 
 func startDiskWriter(profile *model.Profile) {
@@ -40,23 +41,25 @@ func startDiskWriter(profile *model.Profile) {
 	go diskWriter(profile)
 }
 
-func getSamplesFromBuffer(sampleCount int, writeBuffer chan float32) []float32 {
-	currentBufferLen := len(writeBuffer)
+// func getSamplesFromBuffer(sampleCount int, writeBuffer chan float32) []float32 {
+// 	// TODO: Make sure this isn't necessary (trying to optimize each write cycle)
+// 	currentBufferLen := len(writeBuffer)
 
-	if currentBufferLen < sampleCount {
-		// this should never happen
-		slog.Error(fmt.Sprintf("Requested %d samples but only have %d", sampleCount, currentBufferLen))
-	}
+// 	if currentBufferLen < sampleCount {
+// 		// this should never happen
+// 		slog.Error(fmt.Sprintf("Requested %d samples but only have %d", sampleCount, currentBufferLen))
+// 	}
 
-	samples := make([]float32, sampleCount)
+// 	samples := make([]float32, sampleCount)
 
-	for i := 0; i < sampleCount; i++ {
-		sample := <-writeBuffer
-		samples[i] = sample
-	}
+// 	for i := 0; i < sampleCount; i++ {
+// 		// populate the sample
+// 		sample := <-writeBuffer
+// 		samples[i] = sample
+// 	}
 
-	return samples
-}
+// 	return samples
+// }
 
 func diskWriter(profile *model.Profile) {
 out:
@@ -75,7 +78,7 @@ out:
 				break out
 			}
 
-			time.Sleep(5 * time.Millisecond)
+			time.Sleep(1 * time.Millisecond)
 		}
 	}
 
@@ -83,9 +86,11 @@ out:
 }
 
 func writeCycle(profile *model.Profile, finish bool) bool {
-	for _, channel := range outputFiles {
-		requiredSamples := int(profile.AudioServer.MinimumWriteSize * float64(profile.AudioServer.SampleRate))
+	requiredSamples := int(profile.AudioServer.MinimumWriteSize * float64(profile.AudioServer.SampleRate))
+	samplesToRead := requiredSamples
+	factor := float32(math.Pow(2, float64(profile.Output.BitDepth)-1)) - 1.0
 
+	for _, channel := range outputFiles {
 		writeBuffers := channel.GetWriteBuffers()
 
 		// check if enough to write, then write
@@ -96,17 +101,14 @@ func writeCycle(profile *model.Profile, finish bool) bool {
 					stats.diskProcessIdleChan <- time.Now().UnixMicro() - stats.diskProcessLastEndTime
 				}
 			}
-
 			stats.diskProcessLastStartTime = time.Now().UnixMicro()
-
-			samplesToRead := requiredSamples
 
 			if finish {
 				samplesToRead = len(writeBuffers[0])
-				slog.Debug("disk writer: reading remaining buffer samples: " + string(samplesToRead))
+				slog.Debug(fmt.Sprintf("disk writer: reading remaining buffer samples: %d", samplesToRead))
 			}
 
-			slog.Debug(fmt.Sprintf("Writing %d samples to file", samplesToRead))
+			util.TraceLog(fmt.Sprintf("Writing %d samples to file", samplesToRead))
 
 			if !channel.FileOpen {
 				slog.Error("Cannot write to closed file, " + channel.FileName)
@@ -116,20 +118,47 @@ func writeCycle(profile *model.Profile, finish bool) bool {
 
 			for _, writeBuffer := range writeBuffers {
 				// TODO: do i want to limit this to the requiredSampels count or just drain what it has left?
-				fBuf := &audio.Float32Buffer{
-					Data: getSamplesFromBuffer(samplesToRead, writeBuffer),
+
+				//
+				// previous version
+				//
+
+				// fBuf := &audio.Float32Buffer{
+				// 	Data: getSamplesFromBuffer(samplesToRead, writeBuffer),
+				// 	Format: &audio.Format{
+				// 		NumChannels: int(channel.ChannelCount),
+				// 		SampleRate:  int(channel.SampleRate),
+				// 	},
+				// }
+
+				// transforms.PCMScaleF32(fBuf, profile.Output.BitDepth)
+
+				// iBuf := fBuf.AsIntBuffer()
+
+				// // TODO: add interleave support
+				// channel.Write(iBuf)
+
+				//
+				// new version
+				//
+				buf := &audio.IntBuffer{
+					Data: make([]int, samplesToRead),
 					Format: &audio.Format{
 						NumChannels: int(channel.ChannelCount),
 						SampleRate:  int(channel.SampleRate),
 					},
 				}
 
-				transforms.PCMScaleF32(fBuf, profile.Output.BitDepth)
-
-				iBuf := fBuf.AsIntBuffer()
+				// TODO: does this actually support 24 bit??
+				// for each sample we load, scale and cast to int
+				for i := 0; i < samplesToRead; i++ {
+					// populate the sample
+					// buf.Data[i] = <-writeBuffer
+					buf.Data[i] = int(<-writeBuffer * factor)
+				}
 
 				// TODO: add interleave support
-				channel.Write(iBuf)
+				channel.Write(buf)
 			}
 
 			if finish {
