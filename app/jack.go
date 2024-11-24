@@ -38,8 +38,7 @@ var (
 )
 
 func init() {
-	// TODO: does this need to change?
-	// TODO: do we need to track this channel fill ratio too?
+	// TODO: does this need to change - do we need to track this channel fill ratio too?
 	cycleDoneChannel = make(chan bool, 30)
 }
 
@@ -89,6 +88,8 @@ func jackProcess(nframes uint32) int {
 		}
 
 		if !reaper.Reaped() {
+			stats.samplesProcessed += uint64(nframes)
+
 			signalLevels[portNum] = &model.SignalLevel{
 				Instant: int(util.AmplitudeToDb(sigLevel)),
 			}

@@ -24,11 +24,11 @@ package app
 
 import (
 	"fmt"
-	"log/slog"
 	"math"
 	"os"
 	"time"
 
+	"fox-audio/model"
 	"fox-audio/reaper"
 	"fox-audio/util"
 )
@@ -43,13 +43,21 @@ type statistics struct {
 	processElapsedChan chan int64
 	processIdleChan    chan int64
 	shutdownChan       chan bool
+	samplesProcessed   uint64
 }
 
-func initStatistics() chan bool {
+func initStatistics(profile *model.Profile) chan bool {
 	stats = statistics{
 		processElapsedChan: make(chan int64, 30),
 		processIdleChan:    make(chan int64, 30),
 		shutdownChan:       make(chan bool, 5),
+		samplesProcessed:   0,
+	}
+
+	channels := 0
+
+	for _, channel := range profile.Channels {
+		channels += len(channel.Ports)
 	}
 
 	// audio engine load calculations
@@ -67,8 +75,11 @@ func initStatistics() chan bool {
 		// TODO: this should point to recording directory
 		wd, _ := os.Getwd()
 
+		usedBytes := (stats.samplesProcessed * uint64(profile.Output.BitDepth)) / 8
+
 		diskInfo := util.GetDiskSpace(wd)
 		displayHandle.tui.SetDiskUsage(int(math.Round(diskInfo.UsedPct * 100.0)))
+		displayHandle.tui.SetSessionSize(usedBytes)
 
 		util.TraceLog(fmt.Sprintf("Disk total: %d B, Disk Used: %d B, Disk free: %d B, used %0.2f%%", diskInfo.Size, diskInfo.Used, diskInfo.Free, diskInfo.UsedPct))
 	})
@@ -88,7 +99,12 @@ func initStatistics() chan bool {
 		bufferAvg := sum / float64(count)
 
 		displayHandle.tui.SetBufferUtilization(int(math.Round(bufferAvg * 100.0)))
-		slog.Info(fmt.Sprintf("buffer: %0.2f%%", bufferAvg))
+		util.TraceLog(fmt.Sprintf("buffer: %0.2f%%", bufferAvg))
+	})
+
+	processOnInterval("recording duration stats", stats.shutdownChan, 50, func() {
+		duration := float64(stats.samplesProcessed) / float64(profile.AudioServer.SampleRate)
+		displayHandle.tui.SetDuration(duration)
 	})
 
 	return stats.shutdownChan

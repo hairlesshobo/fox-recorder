@@ -118,7 +118,6 @@ func slogLogger(level LogLevel, message string) {
 }
 
 func logProcessor(pipe *os.File, level LogLevel) {
-	// TODO: i think this one can be killed automatically when program terminates and not rely on reaper
 	scanner := bufio.NewScanner(pipe)
 
 	for scanner.Scan() {

@@ -42,9 +42,11 @@ import (
 //
 
 const (
-	StatusPaused    = 0
-	StatusPlaying   = 1
-	StatusRecording = 2
+	StatusPaused       = 0
+	StatusPlaying      = 1
+	StatusRecording    = 2
+	StatusStarting     = 3
+	StatusShuttingDown = 4
 
 	meterWidth = 4
 )
@@ -156,6 +158,8 @@ func (tui *Tui) Initalize() {
 	statusGrid.AddItem(tui.tvPosition.GetGrid(), 1, statusColOffset, 1, 1, 0, 0, false)
 	statusGrid.AddItem(tui.tvFormat.GetGrid(), 2, statusColOffset, 1, 1, 0, 0, false)
 	statusGrid.AddItem(tui.tvFileSize.GetGrid(), 3, statusColOffset, 1, 1, 0, 0, false)
+
+	// TODO: implement error counting
 	statusGrid.AddItem(tui.tvErrorCount.GetGrid(), 4, statusColOffset, 1, 1, 0, 0, false)
 
 	tui.meterDiskSpace = custom.NewStatusMeter(headerWidth, "Disk Space", 0, "%")
@@ -223,16 +227,12 @@ func (tui *Tui) WaitForShutdown() {
 //
 
 func (tui *Tui) eventHandler(event *tcell.EventKey) *tcell.EventKey {
-	// TODO: make sure this works
 	// Anything handled here will be executed on the main thread
 	switch event.Key() {
 	case tcell.KeyEsc:
 	case tcell.KeyCtrlC:
-		// Exit the application
-		// tui.app.Stop()
 		go reaper.Reap()
 		return nil
-		// return event
 	}
 
 	return event
@@ -262,7 +262,7 @@ func (tui *Tui) excecuteLoop() {
 //
 
 func (tui *Tui) SetTransportStatus(status int) {
-	if status < 0 || status > 3 {
+	if status < 0 || status > 4 {
 		panic("invalid status value provided: " + string(status))
 	}
 
@@ -270,26 +270,34 @@ func (tui *Tui) SetTransportStatus(status int) {
 	var color tcell.Color
 	var transportStatus string
 
-	if status == 0 {
+	if status == StatusPaused {
 		icon = theme.RunePause
 		color = theme.Blue
 		transportStatus = "Paused"
-	} else if status == 1 {
+	} else if status == StatusPlaying {
 		icon = theme.RunePlay
 		color = theme.Green
 		transportStatus = "Playing"
-	} else if status == 2 {
+	} else if status == StatusRecording {
 		icon = theme.RuneRecord
 		color = theme.Red
 		transportStatus = "Recording"
-	} else if status == 3 {
+	} else if status == StatusStarting {
 		icon = theme.RuneClock
 		color = theme.Yellow
 		transportStatus = "Starting Audio Server"
+	} else if status == StatusShuttingDown {
+		icon = theme.RuneClock
+		color = theme.Yellow
+		transportStatus = "Shutting down"
 	}
 
 	tui.tvTransportStatus.SetCurrentValue(string(icon) + " " + transportStatus)
 	tui.tvTransportStatus.SetColor(color)
+}
+
+func (tui *Tui) SetDuration(duration float64) {
+	tui.tvPosition.SetCurrentValue(util.FormatDuration(duration))
 }
 
 func (tui *Tui) SetAudioFormat(format string) {

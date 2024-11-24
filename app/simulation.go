@@ -42,7 +42,6 @@ func startSimulation(freezeMeters bool, channelCount int) {
 		size := uint64(0)
 
 		for range t.C {
-			// TODO: have the random meters fall off more gradually to seem more realistic
 			size += uint64(rand.IntN(5) * 1024 * 32)
 
 			if reaper.Reaped() {

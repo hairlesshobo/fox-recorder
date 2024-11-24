@@ -88,7 +88,6 @@ func DirectoryExists(testDir string) bool {
 
 func ResolveHomeDirPath(testPath string) (string, error) {
 	if strings.HasPrefix(testPath, "~/") {
-		// TODO: make this a shared function
 		homeDir, err := os.UserHomeDir()
 
 		if err != nil {
@@ -178,7 +177,6 @@ func TraceLog(message string, args ...any) {
 
 func FormatSize(bytes uint64) string {
 	suffix := []string{"B", "KiB", "MiB", "GiB", "TiB"}
-	// char length = sizeof(suffix) / sizeof(suffix[0])
 
 	i := 0
 	bytesFloat := float64(bytes)
@@ -191,4 +189,27 @@ func FormatSize(bytes uint64) string {
 	}
 
 	return fmt.Sprintf("%.02f %s", bytesFloat, suffix[i])
+}
+
+func FormatDuration(duration float64) string {
+	hours := 0
+	minutes := 0
+	seconds := 0
+
+	if duration > 3600 {
+		hours = int(duration) / 3600
+		duration -= float64(hours) * 3600.0
+	}
+
+	if duration > 60 {
+		minutes = int(duration) / 60
+		duration -= float64(minutes) * 60
+	}
+
+	seconds = int(duration)
+	duration -= float64(seconds)
+
+	mseconds := int(duration * 1000)
+
+	return fmt.Sprintf("%02d:%02d:%02d.%03d", hours, minutes, seconds, mseconds)
 }

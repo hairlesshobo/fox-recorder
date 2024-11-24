@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"time"
 
 	"fox-audio/audio"
@@ -49,7 +50,7 @@ var (
 	outputFiles   []*audio.OutputFile
 )
 
-func configureTextLogger() {
+func ConfigureTextLogger() {
 	// text logger
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.Level(slog.LevelDebug),
@@ -57,7 +58,7 @@ func configureTextLogger() {
 	slog.SetDefault(logger)
 }
 
-func configureFileLogger() {
+func ConfigureFileLogger() {
 	f, err := os.Create("/Users/flip/projects/personal/fox-recorder/fox.log")
 
 	if err != nil {
@@ -74,7 +75,7 @@ func configureFileLogger() {
 	shared.EnableSlogLogging()
 }
 
-func configureTuiLogger() {
+func ConfigureTuiLogger() {
 	handler := shared.NewTuiLogHandler(displayHandle.tui, slog.LevelDebug)
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
@@ -90,14 +91,14 @@ func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool,
 	displayHandle.tui.Start()
 	reaper.Callback("tui", displayHandle.tui.Shutdown)
 
-	statsShutdownChan := initStatistics()
+	statsShutdownChan := initStatistics(profile)
 	reaper.Callback("stats", func() { statsShutdownChan <- true })
 
 	reaper.Callback("wait", func() { time.Sleep(3 * time.Second) })
 
-	// configureTextLogger()
-	// configureTuiLogger()
-	configureFileLogger()
+	// ConfigureTextLogger()
+	ConfigureTuiLogger()
+	// ConfigureFileLogger()
 
 	if !simulate {
 		audioServer = audio.NewServer(jackClientName, profile)
@@ -136,11 +137,10 @@ func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool,
 
 		audioServer.ConnectPorts(true, false)
 
-		displayHandle.tui.SetAudioFormat(fmt.Sprintf("%0.1fKHz", float64(audioServer.GetSampleRate())/1000.0))
+		sampleRateStr := strconv.FormatFloat(float64(audioServer.GetSampleRate())/1000.0, 'f', -1, 64)
+		displayHandle.tui.SetAudioFormat(fmt.Sprintf("%dbit / %sKHz", profile.Output.BitDepth, sampleRateStr))
 		displayHandle.tui.SetTransportStatus(display.StatusRecording)
 	}
-
-	// TODO: connect port(s)
 
 	// this blocks until the jack connection shuts down
 	if simulate {
@@ -148,5 +148,6 @@ func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool,
 		startSimulation(simulateFreezeMeters, simulateChannelCount)
 	}
 
+	reaper.Callback("shutdown status", func() { displayHandle.tui.SetTransportStatus(display.StatusShuttingDown) })
 	reaper.Wait()
 }

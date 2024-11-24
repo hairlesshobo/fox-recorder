@@ -72,7 +72,6 @@ out:
 			// waiting for data, check for reapage and sleep briefly
 			if reaper.Reaped() {
 				slog.Debug("diskwriter: reap caught, finish writing buffer")
-				// TODO: we were reaped.. clean up
 				writeCycle(profile, true)
 				break out
 			}

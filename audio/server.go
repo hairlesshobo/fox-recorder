@@ -107,7 +107,7 @@ func (server *JackServer) StartServer() {
 		server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-d%s", server.driver))
 
 		if server.device != "" {
-			server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-d%s", server.device))
+			server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-d'%s'", server.device))
 		}
 
 		server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-r%d", server.sampleRate))
@@ -116,6 +116,7 @@ func (server *JackServer) StartServer() {
 		stdout, err := server.cmd.StdoutPipe()
 
 		// TODO: handle jack startup failure!!
+		// TODO: handle jack stderr
 
 		if err != nil {
 			slog.Error("Error occurred running 'diskutil activity' command: " + err.Error())
