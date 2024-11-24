@@ -65,7 +65,7 @@ type JackServer struct {
 func NewServer(clientName string, profile *model.Profile) *JackServer {
 	audioInterfaceParts := strings.Split(profile.AudioServer.Interface[0], "/")
 
-	// TODO: add support for multiple interfaces
+	// TODO: add support for trying multiple audio interfaces
 	server := JackServer{
 		profile: profile,
 
@@ -93,9 +93,8 @@ func (server *JackServer) StartServer() {
 		reaper.Register("jack server")
 
 		slog.Info("Starting JACK server...")
-		// TODO: dynamically find jackd binary
 		// TODO: allow to specify jack binary in config
-		// /usr/local/bin/jackd -dcoreaudio -d'AppleUSBAudioEngine:BEHRINGER:X-USB:42D1635E:1,2' -r48000 -p4096 -C
+		// TODO: dynamically find jackd binary
 		server.cmd = exec.Command("/usr/local/bin/jackd")
 
 		// TODO: add this to config
@@ -163,7 +162,7 @@ func (server *JackServer) StopServer() {
 	if server != nil {
 		server.Disconnect()
 
-		// TODO: make sure process is running?
+		// TODO: make sure process is running? add boolean to server struct and set/clear it in StartServer() w/ mutex
 		server.cmd.Process.Kill()
 		server.cmd.Wait()
 	}
