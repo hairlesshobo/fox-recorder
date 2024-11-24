@@ -102,7 +102,7 @@ func (server *JackServer) StartServer() {
 		server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-d%s", server.driver))
 
 		if server.device != "" {
-			server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-d'%s'", server.device))
+			server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-d%s", server.device))
 		}
 
 		server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-r%d", server.sampleRate))

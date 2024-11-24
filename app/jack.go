@@ -39,7 +39,7 @@ var (
 
 func init() {
 	// TODO: does this need to change - do we need to track this channel fill ratio too?
-	cycleDoneChannel = make(chan bool, 30)
+	cycleDoneChannel = make(chan bool, 10)
 }
 
 func jackError(message string) {
@@ -63,13 +63,13 @@ func jackXrun() int {
 
 func jackProcess(nframes uint32) int {
 	// audio load statistics
-	if stats.lastEndTime > 0 {
-		if len(stats.processIdleChan) < cap(stats.processIdleChan) {
-			stats.processIdleChan <- time.Now().UnixMicro() - stats.lastEndTime
+	if stats.jackProcessLastEndTime > 0 {
+		if len(stats.jackProcessIdleChan) < cap(stats.jackProcessIdleChan) {
+			stats.jackProcessIdleChan <- time.Now().UnixMicro() - stats.jackProcessLastEndTime
 		}
 	}
 
-	stats.lastStartTime = time.Now().UnixMicro()
+	stats.jackProcessLastStartTime = time.Now().UnixMicro()
 
 	// loop through the input channels
 	for portNum, port := range ports {
@@ -104,7 +104,6 @@ func jackProcess(nframes uint32) int {
 					for _, sample := range samplesIn {
 						writeBuffer <- float32(sample)
 					}
-
 				} else {
 					slog.Error("No space left in write buffer!!")
 				}
@@ -121,10 +120,11 @@ func jackProcess(nframes uint32) int {
 	cycleDoneChannel <- true
 
 	// audio load statistics
-	stats.lastEndTime = time.Now().UnixMicro()
-	if len(stats.processElapsedChan) < cap(stats.processElapsedChan) {
-		stats.processElapsedChan <- stats.lastEndTime - stats.lastStartTime
+	stats.jackProcessLastEndTime = time.Now().UnixMicro()
+	if len(stats.jackProcessElapsedChan) < cap(stats.jackProcessElapsedChan) {
+		stats.jackProcessElapsedChan <- stats.jackProcessLastEndTime - stats.jackProcessLastStartTime
 
 	}
+
 	return 0
 }

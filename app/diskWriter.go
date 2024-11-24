@@ -75,7 +75,7 @@ out:
 				break out
 			}
 
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(5 * time.Millisecond)
 		}
 	}
 
@@ -90,6 +90,15 @@ func writeCycle(profile *model.Profile, finish bool) bool {
 
 		// check if enough to write, then write
 		if len(writeBuffers[0]) > requiredSamples || finish {
+			// disk load statistics
+			if stats.diskProcessLastEndTime > 0 {
+				if len(stats.diskProcessIdleChan) < cap(stats.diskProcessIdleChan) {
+					stats.diskProcessIdleChan <- time.Now().UnixMicro() - stats.diskProcessLastEndTime
+				}
+			}
+
+			stats.diskProcessLastStartTime = time.Now().UnixMicro()
+
 			samplesToRead := requiredSamples
 
 			if finish {
@@ -125,6 +134,13 @@ func writeCycle(profile *model.Profile, finish bool) bool {
 
 			if finish {
 				channel.Close()
+			}
+
+			// audio load statistics
+			stats.diskProcessLastEndTime = time.Now().UnixMicro()
+			if len(stats.diskProcessElapsedChan) < cap(stats.diskProcessElapsedChan) {
+				stats.diskProcessElapsedChan <- stats.diskProcessLastEndTime - stats.diskProcessLastStartTime
+
 			}
 		}
 	}

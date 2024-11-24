@@ -24,6 +24,7 @@ package app
 
 import (
 	"fmt"
+	"log/slog"
 	"math"
 	"time"
 
@@ -37,20 +38,30 @@ var (
 )
 
 type statistics struct {
-	lastStartTime      int64
-	lastEndTime        int64
-	processElapsedChan chan int64
-	processIdleChan    chan int64
-	shutdownChan       chan bool
-	samplesProcessed   uint64
+	jackProcessLastStartTime int64
+	jackProcessLastEndTime   int64
+	jackProcessElapsedChan   chan int64
+	jackProcessIdleChan      chan int64
+
+	diskProcessLastStartTime int64
+	diskProcessLastEndTime   int64
+	diskProcessElapsedChan   chan int64
+	diskProcessIdleChan      chan int64
+
+	shutdownChan     chan bool
+	samplesProcessed uint64
 }
 
 func initStatistics(profile *model.Profile) chan bool {
 	stats = statistics{
-		processElapsedChan: make(chan int64, 30),
-		processIdleChan:    make(chan int64, 30),
-		shutdownChan:       make(chan bool, 5),
-		samplesProcessed:   0,
+		jackProcessElapsedChan: make(chan int64, 30),
+		jackProcessIdleChan:    make(chan int64, 30),
+
+		diskProcessElapsedChan: make(chan int64, 30),
+		diskProcessIdleChan:    make(chan int64, 30),
+
+		shutdownChan:     make(chan bool, 5),
+		samplesProcessed: 0,
 	}
 
 	channels := 0
@@ -61,13 +72,31 @@ func initStatistics(profile *model.Profile) chan bool {
 
 	// audio engine load calculations
 	processOnInterval("audio engine load stats", stats.shutdownChan, 250, func() {
-		idleTimeAvg := util.GetChanAverage(stats.processIdleChan)
-		processTimeAvg := util.GetChanAverage(stats.processElapsedChan)
-		avgAudioLoad := processTimeAvg / idleTimeAvg
+		jackIdleTimeAvg := util.GetChanAverage(stats.jackProcessIdleChan)
+		jackProcessTimeAvg := util.GetChanAverage(stats.jackProcessElapsedChan)
+		jackAvgLoad := jackProcessTimeAvg / jackIdleTimeAvg
 
-		if !math.IsNaN(avgAudioLoad) {
-			displayHandle.tui.SetAudioLoad(int(avgAudioLoad * 100.0))
-			util.TraceLog(fmt.Sprintf("Idle time: %0.0f us, Process time: %0.0f us, load %0.3f%%", idleTimeAvg, processTimeAvg, avgAudioLoad))
+		if !math.IsNaN(jackAvgLoad) {
+			displayHandle.tui.SetAudioLoad(int(jackAvgLoad * 100.0))
+			util.TraceLog(fmt.Sprintf("jack Idle time: %0.0f us, Process time: %0.0f us, load %0.3f%%", jackIdleTimeAvg, jackProcessTimeAvg, jackAvgLoad))
+		}
+
+		// cycle buffer
+		cycleBuffer := float64(len(cycleDoneChannel)) / float64(cap(cycleDoneChannel))
+
+		if !math.IsNaN(cycleBuffer) {
+			displayHandle.tui.SetCycleBuffer(int(cycleBuffer * 100.0))
+			slog.Debug(fmt.Sprintf("cycle buffer: %03f%%", cycleBuffer))
+		}
+
+		// calculate disk load
+		diskIdleTimeAvg := util.GetChanAverage(stats.diskProcessIdleChan)
+		diskWriteTimeAvg := util.GetChanAverage(stats.diskProcessElapsedChan)
+		diskAvgLoad := diskWriteTimeAvg / diskIdleTimeAvg
+
+		if !math.IsNaN(diskAvgLoad) {
+			displayHandle.tui.SetDiskLoad(int(diskAvgLoad * 100.0))
+			slog.Debug(fmt.Sprintf("disk Idle time: %0.0f us, Process time: %0.0f us, load %0.3f%%", diskIdleTimeAvg, diskWriteTimeAvg, diskAvgLoad))
 
 			// TODO: calculate disk write load (time writing / time idle)
 		}

@@ -7,8 +7,9 @@ audio_server:
   minimum_write_size: 3
 
 output:
+  directory_template: /Volumes/EOS_DIGITAL/jack/2006-01-02/
   # directory_template: ~/fox_test/2006-01-02/
-  directory_template: /Volumes/JACK/jack/2006-01-02/
+  # directory_template: /Volumes/JACK/jack/2006-01-02/
   format: wav
   bit_depth: 16
 

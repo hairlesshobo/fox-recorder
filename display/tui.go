@@ -97,9 +97,11 @@ type Tui struct {
 	tvFileSize        *custom.StatusText
 	tvErrorCount      *custom.StatusText
 
-	meterDiskSpace *custom.StatusMeter
-	meterBuffer    *custom.StatusMeter
-	meterAudioLoad *custom.StatusMeter
+	meterDiskSpace   *custom.StatusMeter
+	meterBuffer      *custom.StatusMeter
+	meterAudioLoad   *custom.StatusMeter
+	meterCycleBuffer *custom.StatusMeter
+	meterDiskLoad    *custom.StatusMeter
 }
 
 //
@@ -138,7 +140,7 @@ func (tui *Tui) Initalize() {
 	statusGrid.SetRows(1, 1, 1, 1, 1, 1, -1)
 	statusGrid.SetBackgroundColor(cview.Styles.PrimitiveBackgroundColor)
 
-	headerWidth := 16
+	headerWidth := 18
 
 	tui.tvTransportStatus = custom.NewStatusTextField(headerWidth, "Status", string(theme.RuneRecord)+" Recording")
 	tui.tvTransportStatus.SetColor(theme.Red)
@@ -156,12 +158,16 @@ func (tui *Tui) Initalize() {
 
 	tui.meterDiskSpace = custom.NewStatusMeter(headerWidth, "Disk Space", 0, "%")
 	tui.meterBuffer = custom.NewStatusMeter(headerWidth, "Buffer", 0, "%")
+	tui.meterCycleBuffer = custom.NewStatusMeter(headerWidth, "Cycle Buffer", 0, "%")
 	tui.meterAudioLoad = custom.NewStatusMeter(headerWidth, "Audio Load", 0, "%")
+	tui.meterDiskLoad = custom.NewStatusMeter(headerWidth, "Disk Load", 0, "%")
 
 	meterColOffset := 1
 	statusGrid.AddItem(tui.meterDiskSpace.GetGrid(), 0, meterColOffset, 1, 1, 0, 0, false)
 	statusGrid.AddItem(tui.meterBuffer.GetGrid(), 1, meterColOffset, 1, 1, 0, 0, false)
 	statusGrid.AddItem(tui.meterAudioLoad.GetGrid(), 2, meterColOffset, 1, 1, 0, 0, false)
+	statusGrid.AddItem(tui.meterCycleBuffer.GetGrid(), 3, meterColOffset, 1, 1, 0, 0, false)
+	statusGrid.AddItem(tui.meterDiskLoad.GetGrid(), 4, meterColOffset, 1, 1, 0, 0, false)
 	tui.appGrid.AddItem(statusGrid, 0, 0, 1, 1, 0, 0, false)
 
 	tui.metersGrid = cview.NewGrid()
@@ -300,17 +306,8 @@ func (tui *Tui) SetSessionSize(size uint64) {
 	tui.tvFileSize.SetCurrentValue(util.FormatSize(size))
 }
 
-func (tui *Tui) SetAudioLoad(percent int) {
-	tui.meterAudioLoad.SetCurrentValue(percent)
-
-	if percent <= 20 {
-		tui.meterAudioLoad.SetColor(theme.Green)
-	} else if percent <= 50 {
-		tui.meterAudioLoad.SetColor(theme.Yellow)
-	} else {
-		tui.meterAudioLoad.SetColor(theme.Red)
-	}
-}
+// cycleBuffer
+// diskWriterLoad
 
 func (tui *Tui) UpdateSignalLevels(levels []*model.SignalLevel) {
 	for i := range levels {
@@ -319,28 +316,39 @@ func (tui *Tui) UpdateSignalLevels(levels []*model.SignalLevel) {
 	}
 }
 
-func (tui *Tui) SetDiskUsage(percent int) {
-	tui.meterDiskSpace.SetCurrentValue(percent)
+func (tui *Tui) updateMeter(meter *custom.StatusMeter, value, warnPct, cautionPct int) {
+	color := tcell.ColorDefault
 
-	if percent <= 20 {
-		tui.meterDiskSpace.SetColor(theme.Green)
-	} else if percent <= 50 {
-		tui.meterDiskSpace.SetColor(theme.Yellow)
+	if value <= warnPct {
+		color = theme.Green
+	} else if value <= cautionPct {
+		color = theme.Yellow
 	} else {
-		tui.meterDiskSpace.SetColor(theme.Red)
+		color = theme.Red
 	}
+
+	meter.SetCurrentValue(value)
+	meter.SetColor(color)
+}
+
+func (tui *Tui) SetAudioLoad(percent int) {
+	tui.updateMeter(tui.meterAudioLoad, percent, 20, 50)
+}
+
+func (tui *Tui) SetDiskUsage(percent int) {
+	tui.updateMeter(tui.meterDiskSpace, percent, 20, 50)
 }
 
 func (tui *Tui) SetBufferUtilization(percent int) {
-	tui.meterBuffer.SetCurrentValue(percent)
+	tui.updateMeter(tui.meterBuffer, percent, 50, 75)
+}
 
-	if percent <= 50 {
-		tui.meterBuffer.SetColor(theme.Green)
-	} else if percent <= 75 {
-		tui.meterBuffer.SetColor(theme.Yellow)
-	} else {
-		tui.meterBuffer.SetColor(theme.Red)
-	}
+func (tui *Tui) SetDiskLoad(percent int) {
+	tui.updateMeter(tui.meterDiskLoad, percent, 50, 75)
+}
+
+func (tui *Tui) SetCycleBuffer(percent int) {
+	tui.updateMeter(tui.meterCycleBuffer, percent, 20, 50)
 }
 
 func (tui *Tui) SetChannelCount(channelCount int) {
