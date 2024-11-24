@@ -25,8 +25,9 @@
 package util
 
 import (
-	"fox-audio/model"
 	"syscall"
+
+	"fox-audio/model"
 )
 
 // TODO: make this linux happy

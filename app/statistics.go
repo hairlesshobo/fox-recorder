@@ -25,7 +25,6 @@ package app
 import (
 	"fmt"
 	"math"
-	"os"
 	"time"
 
 	"fox-audio/model"
@@ -66,17 +65,16 @@ func initStatistics(profile *model.Profile) chan bool {
 		processTimeAvg := util.GetChanAverage(stats.processElapsedChan)
 		avgAudioLoad := processTimeAvg / idleTimeAvg
 
-		displayHandle.tui.SetAudioLoad(int(avgAudioLoad * 100.0))
-		util.TraceLog(fmt.Sprintf("Idle time: %0.0f us, Process time: %0.0f us, load %0.3f%%", idleTimeAvg, processTimeAvg, avgAudioLoad))
+		if !math.IsNaN(avgAudioLoad) {
+			displayHandle.tui.SetAudioLoad(int(avgAudioLoad * 100.0))
+			util.TraceLog(fmt.Sprintf("Idle time: %0.0f us, Process time: %0.0f us, load %0.3f%%", idleTimeAvg, processTimeAvg, avgAudioLoad))
 
-		// TODO: calculate disk write load (time writing / time idle)
+			// TODO: calculate disk write load (time writing / time idle)
+		}
 	})
 
-	// disk space utilization
-	processOnInterval("disk space stats", stats.shutdownChan, 1000, func() {
-		// TODO: this should point to recording directory
-		wd, _ := os.Getwd()
-
+	// disk space utilization & session size
+	processOnInterval("disk space & session size stats", stats.shutdownChan, 1000, func() {
 		channelCount := 0
 		for _, channel := range profile.Channels {
 			channelCount += len(channel.Ports)
@@ -89,12 +87,11 @@ func initStatistics(profile *model.Profile) chan bool {
 		usedBytesRaw *= uint64(channelCount)
 
 		// add 44 for each wav file header
-
 		usedBytes := usedBytesRaw + (uint64(fileCount) * 44)
-
-		diskInfo := util.GetDiskSpace(wd)
-		displayHandle.tui.SetDiskUsage(int(math.Round(diskInfo.UsedPct * 100.0)))
 		displayHandle.tui.SetSessionSize(usedBytes)
+
+		diskInfo := util.GetDiskSpace(profile.Output.Directory)
+		displayHandle.tui.SetDiskUsage(int(math.Round(diskInfo.UsedPct * 100.0)))
 
 		util.TraceLog(fmt.Sprintf("Disk total: %d B, Disk Used: %d B, Disk free: %d B, used %0.2f%%", diskInfo.Size, diskInfo.Used, diskInfo.Free, diskInfo.UsedPct))
 	})
@@ -113,8 +110,10 @@ func initStatistics(profile *model.Profile) chan bool {
 
 		bufferAvg := sum / float64(count)
 
-		displayHandle.tui.SetBufferUtilization(int(math.Round(bufferAvg * 100.0)))
-		util.TraceLog(fmt.Sprintf("buffer: %0.2f%%", bufferAvg))
+		if !math.IsNaN(bufferAvg) {
+			displayHandle.tui.SetBufferUtilization(int(math.Round(bufferAvg * 100.0)))
+			util.TraceLog(fmt.Sprintf("buffer: %0.2f%%", bufferAvg))
+		}
 	})
 
 	processOnInterval("recording duration stats", stats.shutdownChan, 50, func() {

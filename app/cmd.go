@@ -63,6 +63,8 @@ func init() {
 	rootCmd.Flags().IntVar(&argSimulateChannelCount, "simulate-channel-count", 32, "Mumber of channels to simulate in UI test")
 
 	rootCmd.Flags().StringVarP(&argProfileName, "profile", "p", "", "Name or path of the profile to load, REQUIRED")
+
+	// TODO: implement empty file auto deletion
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

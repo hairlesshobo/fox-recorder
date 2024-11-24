@@ -23,8 +23,14 @@
 package util
 
 import (
-	"fox-audio/model"
+	"fmt"
+	"log/slog"
+	"os"
 	"strings"
+	"time"
+
+	"fox-audio/model"
+	"fox-audio/reaper"
 )
 
 func ReadProfile(profilePath string) *model.Profile {
@@ -36,5 +42,52 @@ func ReadProfile(profilePath string) *model.Profile {
 
 	ReadYamlFile(profile, profilePath)
 
+	prepareOutputDirectory(profile)
+
 	return profile
+}
+
+func prepareOutputDirectory(profile *model.Profile) {
+	var err error
+	outputDir, err := ResolveHomeDirPath(time.Now().Format(profile.Output.DirectoryTemplate))
+	if err != nil {
+		slog.Error("Failed to resolve home user dir: " + err.Error())
+		reaper.Reap()
+		return
+	}
+
+	if !DirectoryExists(outputDir) {
+		slog.Info("Creating output directory: " + outputDir)
+		os.MkdirAll(outputDir, 0755)
+	}
+
+	// set the calculated values in the profile for other parts of the app to use
+	profile.Output.Take = getTake(outputDir)
+	profile.Output.Directory = outputDir
+}
+
+func getTake(outputDir string) string {
+	entries, _ := os.ReadDir(outputDir)
+
+	take := byte('A')
+
+out:
+	for {
+		for _, entry := range entries {
+			name := entry.Name()
+
+			// skip directories or non-wav files
+			if entry.IsDir() || !strings.HasSuffix(name, ".wav") {
+				continue
+			}
+
+			if strings.HasPrefix(name, fmt.Sprintf("%s_channel", string(take))) {
+				take += 1
+				continue out
+			}
+		}
+		break out
+	}
+
+	return string(take)
 }

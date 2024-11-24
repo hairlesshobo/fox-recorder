@@ -22,7 +22,9 @@
 // =================================================================================
 package util
 
-import "math"
+import (
+	"math"
+)
 
 func GetChanAverage(inputChan chan int64) float64 {
 	sum := 0.0

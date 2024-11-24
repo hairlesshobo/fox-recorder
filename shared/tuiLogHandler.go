@@ -25,8 +25,9 @@ package shared
 import (
 	"context"
 	"fmt"
-	"fox-audio/display"
 	"log/slog"
+
+	"fox-audio/display"
 )
 
 type TuiLogHandler struct {

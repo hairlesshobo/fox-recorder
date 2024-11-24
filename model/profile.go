@@ -43,7 +43,12 @@ type ProfileChannel struct {
 }
 
 type ProfileOutput struct {
-	Directory string `yaml:"directory"`
-	Format    string `yaml:"format"`
-	BitDepth  int    `yaml:"bit_depth"`
+	DirectoryTemplate string `yaml:"directory_template"`
+	Format            string `yaml:"format"`
+	BitDepth          int    `yaml:"bit_depth"`
+
+	// these are calculated at runtime and used internally, but
+	// not able to be set in the profile
+	Directory string
+	Take      string
 }

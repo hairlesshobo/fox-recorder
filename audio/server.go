@@ -36,7 +36,6 @@ import (
 
 	"fox-audio/model"
 	"fox-audio/reaper"
-	"fox-audio/util"
 
 	"github.com/go-audio/wav"
 	"github.com/hairlesshobo/go-jack"
@@ -51,9 +50,6 @@ type JackServer struct {
 	device          string
 	sampleRate      int
 	framesPerPeriod int
-
-	outputDirectory string
-	take            string
 
 	ports       []*Port
 	outputFiles []*OutputFile
@@ -266,26 +262,7 @@ func (server *JackServer) GetOutputFiles() []*OutputFile {
 	return server.outputFiles
 }
 
-func (server *JackServer) prepareOutputDirectory() {
-	outputDir, err := util.ResolveHomeDirPath(time.Now().Format(server.profile.Output.Directory))
-	if err != nil {
-		slog.Error("Failed to resolve home user dir: " + err.Error())
-		reaper.Reap()
-		return
-	}
-
-	if !util.DirectoryExists(outputDir) {
-		slog.Info("Creating output directory: " + outputDir)
-		os.MkdirAll(outputDir, 0755)
-	}
-
-	server.outputDirectory = outputDir
-	server.take = util.GetTake(server.outputDirectory)
-}
-
 func (server *JackServer) PrepareOutputFiles() {
-	server.prepareOutputDirectory()
-
 	for _, channel := range server.profile.Channels {
 		portNumbers := make([]string, len(channel.Ports))
 
@@ -293,11 +270,11 @@ func (server *JackServer) PrepareOutputFiles() {
 			portNumbers[i] = fmt.Sprintf("%02d", channel)
 		}
 
-		fileName := fmt.Sprintf("%s_channel%s_%s.wav", server.take, strings.Join(portNumbers, "-"), channel.ChannelName)
+		fileName := fmt.Sprintf("%s_channel%s_%s.wav", server.profile.Output.Take, strings.Join(portNumbers, "-"), channel.ChannelName)
 
 		outputFile := OutputFile{
 			FileName:     fileName,
-			FilePath:     path.Join(server.outputDirectory, fileName),
+			FilePath:     path.Join(server.profile.Output.Directory, fileName),
 			InputPorts:   make([]*Port, len(channel.Ports)),
 			ChannelCount: len(channel.Ports),
 			BitDepth:     server.profile.Output.BitDepth,

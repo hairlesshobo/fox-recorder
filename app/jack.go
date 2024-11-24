@@ -23,13 +23,13 @@
 package app
 
 import (
+	"log/slog"
+	"time"
+
 	"fox-audio/audio"
 	"fox-audio/model"
 	"fox-audio/reaper"
 	"fox-audio/util"
-
-	"log/slog"
-	"time"
 )
 
 var (

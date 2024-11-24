@@ -22,7 +22,9 @@
 // =================================================================================
 package theme
 
-import "github.com/gdamore/tcell/v2"
+import (
+	"github.com/gdamore/tcell/v2"
+)
 
 const (
 	Blue      = tcell.ColorBlue

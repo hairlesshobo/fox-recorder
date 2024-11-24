@@ -23,10 +23,11 @@
 package app
 
 import (
-	"fox-audio/model"
-	"fox-audio/reaper"
 	"math/rand/v2"
 	"time"
+
+	"fox-audio/model"
+	"fox-audio/reaper"
 )
 
 func startSimulation(freezeMeters bool, channelCount int) {
