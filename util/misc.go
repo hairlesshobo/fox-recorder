@@ -175,3 +175,20 @@ func ReadYamlFile(cfg interface{}, fileName string) error {
 func TraceLog(message string, args ...any) {
 	slog.Log(context.Background(), slog.Level(-10), message, args...)
 }
+
+func FormatSize(bytes uint64) string {
+	suffix := []string{"B", "KiB", "MiB", "GiB", "TiB"}
+	// char length = sizeof(suffix) / sizeof(suffix[0])
+
+	i := 0
+	bytesFloat := float64(bytes)
+
+	if bytes > 1024 {
+		for i = 0; (bytes/1024) > 0 && i < len(suffix); i++ {
+			bytesFloat = float64(bytes) / 1024.0
+			bytes /= 1024
+		}
+	}
+
+	return fmt.Sprintf("%.02f %s", bytesFloat, suffix[i])
+}

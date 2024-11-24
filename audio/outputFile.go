@@ -24,6 +24,7 @@ package audio
 
 import (
 	"errors"
+	"log/slog"
 	"os"
 
 	"github.com/go-audio/audio"
@@ -54,6 +55,7 @@ func (of *OutputFile) GetWriteBuffers() []chan float32 {
 
 func (of *OutputFile) Close() {
 	if of.FileOpen {
+		slog.Info("Closing file " + of.FileName)
 		if of.Encoder != nil {
 			of.Encoder.Close()
 		}

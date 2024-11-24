@@ -25,6 +25,8 @@ package app
 import (
 	"fmt"
 	"log/slog"
+	"os"
+	"time"
 
 	"fox-audio/audio"
 	"fox-audio/display"
@@ -47,6 +49,40 @@ var (
 	outputFiles   []*audio.OutputFile
 )
 
+func configureTextLogger() {
+	// text logger
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.Level(slog.LevelDebug),
+	}))
+	slog.SetDefault(logger)
+}
+
+func configureFileLogger() {
+	f, err := os.Create("/Users/flip/projects/personal/fox-recorder/fox.log")
+
+	if err != nil {
+		panic(err)
+	}
+
+	handler := slog.NewTextHandler(f, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	})
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+
+	shared.HijackLogging()
+	shared.EnableSlogLogging()
+}
+
+func configureTuiLogger() {
+	handler := shared.NewTuiLogHandler(displayHandle.tui, slog.LevelDebug)
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+
+	shared.HijackLogging()
+	shared.EnableSlogLogging()
+}
+
 func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool, simulateChannelCount int) {
 	displayHandle.tui = display.NewTui()
 	displayHandle.tui.Initalize()
@@ -54,26 +90,14 @@ func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool,
 	displayHandle.tui.Start()
 	reaper.Callback("tui", displayHandle.tui.Shutdown)
 
-	initStatistics()
+	statsShutdownChan := initStatistics()
+	reaper.Callback("stats", func() { statsShutdownChan <- true })
 
-	// f, err := os.Create("/Users/flip/projects/personal/fox-recorder/fox.log")
+	reaper.Callback("wait", func() { time.Sleep(3 * time.Second) })
 
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	// handler := slog.NewTextHandler(f, &slog.HandlerOptions{
-	// 	Level: slog.LevelDebug,
-	// })
-	// logger := slog.New(handler)
-	// slog.SetDefault(logger)
-
-	handler := shared.NewTuiLogHandler(displayHandle.tui, slog.LevelDebug)
-	logger := slog.New(handler)
-	slog.SetDefault(logger)
-
-	shared.HijackLogging()
-	shared.EnableSlogLogging()
+	// configureTextLogger()
+	// configureTuiLogger()
+	configureFileLogger()
 
 	if !simulate {
 		audioServer = audio.NewServer(jackClientName, profile)
@@ -107,17 +131,13 @@ func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool,
 		audioServer.ActivateClient()
 
 		audioServer.PrepareOutputFiles()
-		reaper.Callback("close files", audioServer.CloseOutputFiles)
 		outputFiles = audioServer.GetOutputFiles()
 		startDiskWriter(profile)
 
 		audioServer.ConnectPorts(true, false)
 
 		displayHandle.tui.SetAudioFormat(fmt.Sprintf("%0.1fKHz", float64(audioServer.GetSampleRate())/1000.0))
-
-		slog.Info("Input ports connected")
-
-		displayHandle.tui.SetTransportStatus(2)
+		displayHandle.tui.SetTransportStatus(display.StatusRecording)
 	}
 
 	// TODO: connect port(s)

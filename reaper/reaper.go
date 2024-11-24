@@ -29,9 +29,10 @@ import (
 )
 
 var (
-	reapRequested   chan bool
-	reaperCallbacks []callback
-	reaperWaitgroup sync.WaitGroup
+	reapRequested       chan bool
+	reaperCallbacks     []callback
+	reaperRegistrations []string
+	reaperWaitgroup     sync.WaitGroup
 )
 
 type callback struct {
@@ -43,6 +44,7 @@ func init() {
 	reapRequested = make(chan bool, 1)
 	reaperCallbacks = make([]callback, 0)
 	reaperWaitgroup = sync.WaitGroup{}
+	reaperRegistrations = make([]string, 0)
 }
 
 func Reaped() bool {
@@ -57,7 +59,7 @@ func Reap() {
 		slices.Reverse(callbacksReversed)
 
 		for _, callback := range callbacksReversed {
-			slog.Info("reaper: calling reap callback for " + callback.name)
+			slog.Info("reaper: calling reap callback for '" + callback.name + "'")
 			callback.callbackFunc()
 		}
 	}
@@ -70,12 +72,28 @@ func Callback(name string, callbackFunc func()) {
 	})
 }
 
-func Register() {
-	reaperWaitgroup.Add(1)
+func Register(name string) {
+	if slices.Contains(reaperRegistrations, name) {
+		slog.Warn("reaper: already registered '" + name + "'")
+		return
+	} else {
+		reaperRegistrations = append(reaperRegistrations, name)
+		reaperWaitgroup.Add(1)
+		slog.Debug("reaper: registered '" + name + "'")
+	}
 }
 
-func Done() {
-	reaperWaitgroup.Done()
+func Done(name string) {
+	if slices.Contains(reaperRegistrations, name) {
+		reaperRegistrations = slices.DeleteFunc(reaperRegistrations, func(test string) bool {
+			return test == name
+		})
+
+		slog.Debug("reaper: done: '" + name + "'")
+		reaperWaitgroup.Done()
+	} else {
+		slog.Warn("reaper: already done or doesn't exist: '" + name + "'")
+	}
 }
 
 func Wait() {

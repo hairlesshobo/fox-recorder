@@ -25,6 +25,7 @@ package app
 import (
 	"fox-audio/audio"
 	"fox-audio/model"
+	"fox-audio/reaper"
 	"fox-audio/util"
 
 	"log/slog"
@@ -87,24 +88,30 @@ func jackProcess(nframes uint32) int {
 			}
 		}
 
-		signalLevels[portNum] = &model.SignalLevel{
-			Instant: int(util.AmplitudeToDb(sigLevel)),
-		}
+		if !reaper.Reaped() {
+			signalLevels[portNum] = &model.SignalLevel{
+				Instant: int(util.AmplitudeToDb(sigLevel)),
+			}
 
-		// TODO: add a check to make sure recording is enabled
+			// TODO: add a check to make sure recording is enabled
 
-		// if it has a buffer, its enabled
-		// TODO: change this to an explicit Enabled flag?
-		writeBuffer := port.GetWriteBuffer()
-		if cap(writeBuffer) > 0 {
-			if (len(writeBuffer) + int(nframes)) < cap(writeBuffer) {
-				for _, sample := range samplesIn {
-					writeBuffer <- float32(sample)
+			// if it has a buffer, its enabled
+			// TODO: change this to an explicit Enabled flag?
+			writeBuffer := port.GetWriteBuffer()
+			if cap(writeBuffer) > 0 {
+				if (len(writeBuffer) + int(nframes)) < cap(writeBuffer) {
+					for _, sample := range samplesIn {
+						writeBuffer <- float32(sample)
+					}
+
+				} else {
+					// TODO: track these errors
+					slog.Warn("No space left in write buffer!!")
 				}
-
-			} else {
-				// TODO: track these errors
-				slog.Warn("No space left in write buffer!!")
+			}
+		} else {
+			signalLevels[portNum] = &model.SignalLevel{
+				Instant: -150,
 			}
 		}
 	}

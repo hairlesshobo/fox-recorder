@@ -35,7 +35,8 @@ import (
 )
 
 func startDiskWriter(profile *model.Profile) {
-	reaper.Register()
+	reaper.Register("disk writer")
+
 	go diskWriter(profile)
 }
 
@@ -63,44 +64,16 @@ out:
 	for {
 		select {
 		case <-cycleDoneChannel:
-			// check if enough to write, then write
-			for _, channel := range outputFiles {
-				requiredSamples := int(profile.AudioServer.MinimumWriteSize * float64(profile.AudioServer.SampleRate))
-
-				writeBuffers := channel.GetWriteBuffers()
-
-				if len(writeBuffers[0]) > requiredSamples {
-					slog.Debug("Writing samples to file")
-
-					if !channel.FileOpen {
-						slog.Error("Cannot write to closed file, " + channel.FileName)
-						reaper.Reap()
-						return
-					}
-
-					for _, writeBuffer := range writeBuffers {
-						// TODO: do i want to limit this to the requiredSampels count or just drain what it has left?
-						fBuf := &audio.Float32Buffer{
-							Data: getSamplesFromBuffer(requiredSamples, writeBuffer),
-							Format: &audio.Format{
-								NumChannels: int(channel.ChannelCount),
-								SampleRate:  int(channel.SampleRate),
-							},
-						}
-
-						transforms.PCMScaleF32(fBuf, profile.Output.BitDepth)
-
-						iBuf := fBuf.AsIntBuffer()
-
-						// TODO: add interleave support
-						channel.Write(iBuf)
-					}
-				}
+			if !writeCycle(profile, false) {
+				break out
 			}
+
 		default:
 			// waiting for data, check for reapage and sleep briefly
 			if reaper.Reaped() {
+				slog.Debug("diskwriter: reap caught, finish writing buffer")
 				// TODO: we were reaped.. clean up
+				writeCycle(profile, true)
 				break out
 			}
 
@@ -108,5 +81,55 @@ out:
 		}
 	}
 
-	reaper.Done()
+	reaper.Done("disk writer")
+}
+
+func writeCycle(profile *model.Profile, finish bool) bool {
+	for _, channel := range outputFiles {
+		requiredSamples := int(profile.AudioServer.MinimumWriteSize * float64(profile.AudioServer.SampleRate))
+
+		writeBuffers := channel.GetWriteBuffers()
+
+		// check if enough to write, then write
+		if len(writeBuffers[0]) > requiredSamples || finish {
+			samplesToRead := requiredSamples
+
+			if finish {
+				samplesToRead = len(writeBuffers[0])
+				slog.Debug("disk writer: reading remaining buffer samples: " + string(samplesToRead))
+			}
+
+			slog.Debug(fmt.Sprintf("Writing %d samples to file", samplesToRead))
+
+			if !channel.FileOpen {
+				slog.Error("Cannot write to closed file, " + channel.FileName)
+				reaper.Reap()
+				return false
+			}
+
+			for _, writeBuffer := range writeBuffers {
+				// TODO: do i want to limit this to the requiredSampels count or just drain what it has left?
+				fBuf := &audio.Float32Buffer{
+					Data: getSamplesFromBuffer(samplesToRead, writeBuffer),
+					Format: &audio.Format{
+						NumChannels: int(channel.ChannelCount),
+						SampleRate:  int(channel.SampleRate),
+					},
+				}
+
+				transforms.PCMScaleF32(fBuf, profile.Output.BitDepth)
+
+				iBuf := fBuf.AsIntBuffer()
+
+				// TODO: add interleave support
+				channel.Write(iBuf)
+			}
+
+			if finish {
+				channel.Close()
+			}
+		}
+	}
+
+	return true
 }

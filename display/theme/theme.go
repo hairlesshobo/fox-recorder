@@ -20,28 +20,34 @@
 //			limitations under the License.
 //
 // =================================================================================
-package util
+package theme
 
-import (
-	"fox-audio/reaper"
-	"time"
+import "github.com/gdamore/tcell/v2"
+
+const (
+	Blue      = tcell.ColorBlue
+	Green     = tcell.Color71
+	Pink      = tcell.Color131
+	Red       = tcell.Color124
+	SoftGreen = tcell.Color72
+	Yellow    = tcell.Color142
+
+	MeterAlternateBackground = tcell.Color233
 )
 
-func ProcessOnInterval(milliseconds int, process func()) {
-	reaper.Register()
-	go func() {
-		process()
+// 0:    theme.Red, // 124?
+// -2:   tcell.Color131, // 124?
+// -6:   tcell.Color142, // 131?
+// -18:  tcell.Color71,  // 142? 65? muted 71?
+// -150: tcell.Color72,  //tcell.Color120, 59? 60? 61? 66? 67? 68? 72?
 
-		t := time.NewTicker(time.Duration(milliseconds) * time.Millisecond)
-
-		for range t.C {
-			if reaper.Reaped() {
-				break
-			}
-
-			process()
-		}
-
-		reaper.Done()
-	}()
-}
+const (
+	RuneStop        = rune(9209) // ⏹  -- alternate: rune(9635)
+	RuneRecord      = rune(9210) // ⏺  -- alternate: rune(9679)
+	RunePlay        = rune(9205) // ⏵  -- alternate: rune(9654)
+	RunePause       = rune(9208) // ⏸
+	RunePausePlay   = rune(9199) // ⏯
+	RuneSkipBack    = rune(9198) // ⏮
+	RuneSkipForward = rune(9197) // ⏭
+	RuneClock       = rune(9201) // ⏱
+)

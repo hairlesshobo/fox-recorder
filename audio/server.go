@@ -31,6 +31,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"fox-audio/model"
@@ -59,6 +60,9 @@ type JackServer struct {
 
 	jackClient *jack.Client
 
+	clientConnected bool
+	shutdownMutex   sync.Mutex
+
 	cmd *exec.Cmd
 }
 
@@ -77,6 +81,9 @@ func NewServer(clientName string, profile *model.Profile) *JackServer {
 		driver: audioInterfaceParts[0],
 		device: audioInterfaceParts[1],
 
+		clientConnected: false,
+		shutdownMutex:   sync.Mutex{},
+
 		ports: make([]*Port, 0),
 	}
 
@@ -87,7 +94,7 @@ func (server *JackServer) StartServer() {
 	ready := make(chan bool)
 
 	go func() {
-		reaper.Register()
+		reaper.Register("jack server")
 
 		slog.Info("Starting JACK server...")
 		// TODO: dynamically find jackd binary
@@ -149,7 +156,7 @@ func (server *JackServer) StartServer() {
 			}
 		}
 
-		reaper.Done()
+		reaper.Done("jack server")
 	}()
 
 	<-ready
@@ -166,7 +173,7 @@ func (server *JackServer) StopServer() {
 }
 
 func (server *JackServer) Connect() {
-	reaper.Register()
+	reaper.Register("jack client")
 
 	slog.Info("Connecting to JACK server")
 
@@ -178,31 +185,41 @@ func (server *JackServer) Connect() {
 		return
 	}
 
+	server.clientConnected = true
+
 	slog.Info("JACK server connected")
 }
 
 func (server *JackServer) Disconnect() {
-	// todo: need to make sure this can only be called once
-	// disconnect all ports
-	server.DisconnectAllPorts()
+	server.shutdownMutex.Lock()
 
-	// deactivate
-	// server.DeactivateClient()
+	if server.clientConnected {
+		// disconnect all ports
+		server.DisconnectAllPorts()
 
-	slog.Info("Allowing jack to finish processing")
-	time.Sleep(1 * time.Second)
+		// deactivate
+		// server.DeactivateClient()
 
-	slog.Info("Disconnecting from JACK server")
+		slog.Info("Allowing jack to finish processing")
+		time.Sleep(1 * time.Second)
 
-	jackStatus := server.jackClient.Close()
+		slog.Info("Disconnecting JACK client")
 
-	if jackStatus != 0 {
-		slog.Error(fmt.Sprintf("JACK Status: %s", jack.StrError(jackStatus)))
-		return
+		jackStatus := server.jackClient.Close()
+
+		if jackStatus != 0 {
+			slog.Error(fmt.Sprintf("JACK Status: %s", jack.StrError(jackStatus)))
+			return
+		}
+
+		server.clientConnected = false
+		slog.Info("JACK client disconnected")
+		reaper.Done("jack client")
+	} else {
+		slog.Warn("JACK client already disconnected")
 	}
 
-	slog.Info("JACK server disconnected")
-	reaper.Done()
+	server.shutdownMutex.Unlock()
 }
 
 func (server *JackServer) DisconnectAllPorts() {
@@ -278,7 +295,6 @@ func (server *JackServer) PrepareOutputFiles() {
 		fileName := fmt.Sprintf("%s_channel%s_%s.wav", server.take, strings.Join(portNumbers, "-"), channel.ChannelName)
 
 		outputFile := OutputFile{
-			// TODO: support multiple takes
 			FileName:     fileName,
 			FilePath:     path.Join(server.outputDirectory, fileName),
 			InputPorts:   make([]*Port, len(channel.Ports)),
@@ -447,4 +463,6 @@ func (server *JackServer) ConnectPorts(connectInput bool, connectOutput bool) {
 		server.jackClient.Connect(inName, outName)
 		port.connected = true
 	}
+
+	slog.Info("Audio ports connected")
 }

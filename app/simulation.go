@@ -30,8 +30,9 @@ import (
 )
 
 func startSimulation(freezeMeters bool, channelCount int) {
+	reaper.Register("simulation")
+
 	go func() {
-		reaper.Register()
 		t := time.NewTicker(150 * time.Millisecond)
 		levels := make([]*model.SignalLevel, channelCount)
 
@@ -65,6 +66,6 @@ func startSimulation(freezeMeters bool, channelCount int) {
 			}
 		}
 
-		reaper.Done()
+		reaper.Done("simulation")
 	}()
 }

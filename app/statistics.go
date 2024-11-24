@@ -24,9 +24,12 @@ package app
 
 import (
 	"fmt"
+	"log/slog"
 	"math"
 	"os"
+	"time"
 
+	"fox-audio/reaper"
 	"fox-audio/util"
 )
 
@@ -39,16 +42,18 @@ type statistics struct {
 	lastEndTime        int64
 	processElapsedChan chan int64
 	processIdleChan    chan int64
+	shutdownChan       chan bool
 }
 
-func initStatistics() {
+func initStatistics() chan bool {
 	stats = statistics{
 		processElapsedChan: make(chan int64, 30),
 		processIdleChan:    make(chan int64, 30),
+		shutdownChan:       make(chan bool, 5),
 	}
 
 	// audio engine load calculations
-	util.ProcessOnInterval(250, func() {
+	processOnInterval("audio engine load stats", stats.shutdownChan, 250, func() {
 		idleTimeAvg := util.GetChanAverage(stats.processIdleChan)
 		processTimeAvg := util.GetChanAverage(stats.processElapsedChan)
 		avgAudioLoad := processTimeAvg / idleTimeAvg
@@ -58,7 +63,7 @@ func initStatistics() {
 	})
 
 	// disk space utilization
-	util.ProcessOnInterval(1000, func() {
+	processOnInterval("disk space stats", stats.shutdownChan, 1000, func() {
 		// TODO: this should point to recording directory
 		wd, _ := os.Getwd()
 
@@ -69,7 +74,7 @@ func initStatistics() {
 	})
 
 	// buffer utilization
-	util.ProcessOnInterval(200, func() {
+	processOnInterval("buffer stats", stats.shutdownChan, 200, func() {
 		sum := float64(0.0)
 		count := 0
 
@@ -83,6 +88,28 @@ func initStatistics() {
 		bufferAvg := sum / float64(count)
 
 		displayHandle.tui.SetBufferUtilization(int(math.Round(bufferAvg * 100.0)))
-		// slog.Info(fmt.Sprintf("buffer: %0.2f%%", bufferAvg))
+		slog.Info(fmt.Sprintf("buffer: %0.2f%%", bufferAvg))
 	})
+
+	return stats.shutdownChan
+}
+
+func processOnInterval(name string, shutdownChan chan bool, milliseconds int, process func()) {
+	reaper.Register(name)
+
+	go func() {
+		process()
+
+		t := time.NewTicker(time.Duration(milliseconds) * time.Millisecond)
+
+		for range t.C {
+			if len(shutdownChan) > 0 {
+				break
+			}
+
+			process()
+		}
+
+		reaper.Done(name)
+	}()
 }

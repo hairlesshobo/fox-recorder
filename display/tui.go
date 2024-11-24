@@ -28,46 +28,38 @@ import (
 	"time"
 
 	"fox-audio/custom"
+	"fox-audio/display/theme"
 	"fox-audio/model"
 	"fox-audio/reaper"
-	"fox-audio/theme"
+	"fox-audio/util"
 
 	"code.rocketnine.space/tslocum/cview"
 	"github.com/gdamore/tcell/v2"
 )
 
-const (
-	runeStop        = rune(9209) // ⏹  -- alternate: rune(9635)
-	runeRecord      = rune(9210) // ⏺  -- alternate: rune(9679)
-	runePlay        = rune(9205) // ⏵  -- alternate: rune(9654)
-	runePause       = rune(9208) // ⏸
-	runePausePlay   = rune(9199) // ⏯
-	runeSkipBack    = rune(9198) // ⏮
-	runeSkipForward = rune(9197) // ⏭
-	runeClock       = rune(9201) // ⏱
+//
+// constants
+//
 
+const (
 	StatusPaused    = 0
 	StatusPlaying   = 1
 	StatusRecording = 2
 
-	meterAlternateBackground = tcell.Color233
-	meterWidth               = 4
+	meterWidth = 4
 )
 
-var (
+//
+// variables
+//
 
-	// channels   = 32
+var (
 	meterSteps = []int{
 		0, -1, -2, -3, -4, -6, -8,
 		-10, -12, -15, -18, -21, -24, -27,
 		-30, -36, -42, -48, -54, -60}
 
 	levelColors = map[int]tcell.Color{
-		// -1:   tcell.ColorDarkRed, // 124?
-		// -6:   tcell.Color130,
-		// -18:  tcell.ColorGreen, // 142? 65? muted 71?
-		// -150: tcell.Color72,    //tcell.Color120, 59? 60? 61? 66? 67? 68? 72?
-
 		0:    theme.Red,       // 124?
 		-2:   theme.Pink,      // 124?
 		-6:   theme.Yellow,    // 131?
@@ -75,6 +67,10 @@ var (
 		-150: theme.SoftGreen, //tcell.Color120, 59? 60? 61? 66? 67? 68? 72?
 	}
 )
+
+//
+// types
+//
 
 type Tui struct {
 	app             *cview.Application
@@ -111,6 +107,10 @@ type Tui struct {
 	meterAudioLoad *custom.StatusMeter
 }
 
+//
+// constructor
+//
+
 func NewTui() *Tui {
 	tui := &Tui{
 		shutdownChannel: make(chan bool, 1),
@@ -118,6 +118,10 @@ func NewTui() *Tui {
 
 	return tui
 }
+
+//
+// lifecycle managment
+//
 
 func (tui *Tui) Initalize() {
 	tui.app = cview.NewApplication()
@@ -140,7 +144,7 @@ func (tui *Tui) Initalize() {
 
 	headerWidth := 16
 
-	tui.tvTransportStatus = custom.NewStatusTextField(headerWidth, "Status", string(runeRecord)+" Recording")
+	tui.tvTransportStatus = custom.NewStatusTextField(headerWidth, "Status", string(theme.RuneRecord)+" Recording")
 	tui.tvTransportStatus.SetColor(theme.Red)
 	tui.tvPosition = custom.NewStatusTextField(headerWidth, "Position", "00:00:00.000")
 	tui.tvFormat = custom.NewStatusTextField(headerWidth, "Format", "Unknown")
@@ -178,11 +182,60 @@ func (tui *Tui) Initalize() {
 	tui.app.SetRoot(tui.appGrid, true)
 }
 
-// WriteLog should not be used
+func (tui *Tui) Start() {
+	reaper.Register("tui")
+
+	go func() {
+		defer tui.app.HandlePanic()
+
+		// Capture user input
+		tui.app.SetInputCapture(tui.eventHandler)
+
+		if err := tui.app.Run(); err != nil {
+			panic(err)
+		}
+
+		tui.shutdownChannel <- true
+		reaper.Done("tui")
+	}()
+
+	go tui.excecuteLoop()
+}
+
+func (tui *Tui) Shutdown() {
+	slog.Info("Shutting down TUI")
+	tui.app.Stop()
+
+	slog.Info("Waiting for TUI to shut down")
+	tui.WaitForShutdown()
+}
+
+func (tui *Tui) IsShutdown() bool {
+	return len(tui.shutdownChannel) > 0
+}
+
+func (tui *Tui) WaitForShutdown() {
+	<-tui.shutdownChannel
+}
+
 //
-// Deprecated: help me find references to remove
-func (tui *Tui) WriteLog(message string) {
-	tui.tvLogs.Write([]byte(fmt.Sprintf("[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), message)))
+// private functions
+//
+
+func (tui *Tui) eventHandler(event *tcell.EventKey) *tcell.EventKey {
+	// TODO: make sure this works
+	// Anything handled here will be executed on the main thread
+	switch event.Key() {
+	case tcell.KeyEsc:
+	case tcell.KeyCtrlC:
+		// Exit the application
+		// tui.app.Stop()
+		go reaper.Reap()
+		return nil
+		// return event
+	}
+
+	return event
 }
 
 func (tui *Tui) excecuteLoop() {
@@ -204,114 +257,6 @@ func (tui *Tui) excecuteLoop() {
 	fmt.Println("shutting down tui")
 }
 
-func (tui *Tui) SetChannelCount(channelCount int) {
-	levelColumns := make([]int, channelCount+2)
-	levelColumns[0] = 5
-	for i := range channelCount {
-		levelColumns[i+1] = meterWidth
-	}
-	levelColumns[channelCount+1] = -1
-
-	tui.metersGrid.SetColumns(levelColumns...)
-
-	tui.meters = make([]*custom.LevelMeter, channelCount)
-
-	meterStepLabel := cview.NewTextView()
-	meterStepLabel.SetPadding(0, 0, 0, 0)
-
-	// meterStepLabels := make([]string, len(meterSteps))
-	meterStepLabel.Write([]byte(fmt.Sprintln()))
-	for step := 0; step < len(meterSteps); step++ {
-		meterStepLabel.Write([]byte(fmt.Sprintf("%3v\n", fmt.Sprintf("%d", meterSteps[step]))))
-		// meterStepLabels = append(meterStepLabels, fmt.Sprintf("%3v", fmt.Sprintf("%d", meterSteps[step])))
-	}
-	tui.metersGrid.AddItem(meterStepLabel, 0, 0, 1, 1, 0, 0, false)
-
-	for i := range channelCount {
-		tui.meters[i] = custom.NewLevelMeter(meterSteps, levelColors)
-		tui.meters[i].SetBorder(false)
-		tui.meters[i].SetPadding(0, 0, 1, 1)
-		tui.meters[i].SetMinLevel(-150)
-		tui.meters[i].SetLevel(-99)
-		tui.meters[i].SetChannelNumber(fmt.Sprintf("%d", i+1))
-		tui.meters[i].ArmChannel(true)
-
-		// TODO: this needs to be controlled externally
-
-		// if (i >= 8 && i <= 16) || (i >= 19 && i <= 27) {
-		// 	tui.meters[i].ArmChannel(true)
-		// }
-
-		if i%2 == 1 {
-			tui.meters[i].SetBackgroundColor(meterAlternateBackground)
-		}
-
-		tui.metersGrid.AddItem(tui.meters[i], 0, i+1, 1, 1, 0, 0, false)
-	}
-
-}
-
-func (tui *Tui) Shutdown() {
-	tui.app.Stop()
-	tui.WaitForShutdown()
-}
-
-func (tui *Tui) Start() {
-	go func() {
-		defer tui.app.HandlePanic()
-
-		// Capture user input
-		tui.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-			// TODO: make sure this works
-			// Anything handled here will be executed on the main thread
-			switch event.Key() {
-			case tcell.KeyEsc:
-			case tcell.KeyCtrlC:
-				// Exit the application
-				// tui.app.Stop()
-				reaper.Reap()
-				return nil
-				// return event
-			}
-
-			return event
-		})
-
-		if err := tui.app.Run(); err != nil {
-			panic(err)
-		}
-
-		tui.shutdownChannel <- true
-	}()
-
-	go tui.excecuteLoop()
-}
-
-func (tui *Tui) IsShutdown() bool {
-	return len(tui.shutdownChannel) > 0
-}
-
-func (tui *Tui) WaitForShutdown() {
-	<-tui.shutdownChannel
-}
-
-func format_size(bytes uint64) string {
-	suffix := []string{"B", "KiB", "MiB", "GiB", "TiB"}
-	// char length = sizeof(suffix) / sizeof(suffix[0])
-
-	i := 0
-	bytesFloat := float64(bytes)
-
-	if bytes > 1024 {
-		for i = 0; (bytes/1024) > 0 && i < len(suffix); i++ {
-			bytesFloat = float64(bytes) / 1024.0
-			bytes /= 1024
-		}
-	}
-
-	return fmt.Sprintf("%.02f %s", bytesFloat, suffix[i])
-}
-
 //
 // status update functions
 //
@@ -326,19 +271,19 @@ func (tui *Tui) SetTransportStatus(status int) {
 	var transportStatus string
 
 	if status == 0 {
-		icon = runePause
+		icon = theme.RunePause
 		color = theme.Blue
 		transportStatus = "Paused"
 	} else if status == 1 {
-		icon = runePlay
+		icon = theme.RunePlay
 		color = theme.Green
 		transportStatus = "Playing"
 	} else if status == 2 {
-		icon = runeRecord
+		icon = theme.RuneRecord
 		color = theme.Red
 		transportStatus = "Recording"
 	} else if status == 3 {
-		icon = runeClock
+		icon = theme.RuneClock
 		color = theme.Yellow
 		transportStatus = "Starting Audio Server"
 	}
@@ -352,7 +297,7 @@ func (tui *Tui) SetAudioFormat(format string) {
 }
 
 func (tui *Tui) SetSessionSize(size uint64) {
-	tui.tvFileSize.SetCurrentValue(format_size(size))
+	tui.tvFileSize.SetCurrentValue(util.FormatSize(size))
 }
 
 func (tui *Tui) SetAudioLoad(percent int) {
@@ -396,4 +341,54 @@ func (tui *Tui) SetBufferUtilization(percent int) {
 	} else {
 		tui.meterBuffer.SetColor(theme.Red)
 	}
+}
+
+func (tui *Tui) SetChannelCount(channelCount int) {
+	levelColumns := make([]int, channelCount+2)
+	levelColumns[0] = 5
+	for i := range channelCount {
+		levelColumns[i+1] = meterWidth
+	}
+	levelColumns[channelCount+1] = -1
+
+	tui.metersGrid.SetColumns(levelColumns...)
+
+	tui.meters = make([]*custom.LevelMeter, channelCount)
+
+	meterStepLabel := cview.NewTextView()
+	meterStepLabel.SetPadding(0, 0, 0, 0)
+
+	// meterStepLabels := make([]string, len(meterSteps))
+	meterStepLabel.Write([]byte(fmt.Sprintln()))
+	for step := 0; step < len(meterSteps); step++ {
+		meterStepLabel.Write([]byte(fmt.Sprintf("%3v\n", fmt.Sprintf("%d", meterSteps[step]))))
+		// meterStepLabels = append(meterStepLabels, fmt.Sprintf("%3v", fmt.Sprintf("%d", meterSteps[step])))
+	}
+	tui.metersGrid.AddItem(meterStepLabel, 0, 0, 1, 1, 0, 0, false)
+
+	for i := range channelCount {
+		tui.meters[i] = custom.NewLevelMeter(meterSteps, levelColors)
+		tui.meters[i].SetBorder(false)
+		tui.meters[i].SetPadding(0, 0, 1, 1)
+		tui.meters[i].SetMinLevel(-150)
+		tui.meters[i].SetLevel(-99)
+		tui.meters[i].SetChannelNumber(fmt.Sprintf("%d", i+1))
+		tui.meters[i].ArmChannel(true)
+
+		// TODO: this needs to be controlled externally
+
+		// if (i >= 8 && i <= 16) || (i >= 19 && i <= 27) {
+		// 	tui.meters[i].ArmChannel(true)
+		// }
+
+		if i%2 == 1 {
+			tui.meters[i].SetBackgroundColor(theme.MeterAlternateBackground)
+		}
+
+		tui.metersGrid.AddItem(tui.meters[i], 0, i+1, 1, 1, 0, 0, false)
+	}
+}
+
+func (tui *Tui) WriteLog(message string) {
+	tui.tvLogs.Write([]byte(fmt.Sprintf("[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), message)))
 }
