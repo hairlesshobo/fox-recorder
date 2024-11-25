@@ -465,7 +465,7 @@ func (server *JackServer) findJackPort(name string, portDirection PortDirection)
 
 func (server *JackServer) populatePorts() {
 	// get input ports
-	inputPorts := server.jackClient.GetPorts(server.config.HardwarePortConnectionPrefix+":out*", "", jack.PortIsOutput) // | jack.PortIsPhysical)
+	inputPorts := server.jackClient.GetPorts(server.config.HardwarePortConnectionPrefix+"*", "", jack.PortIsOutput) // | jack.PortIsPhysical)
 	for i, port := range inputPorts {
 		server.ports = append(server.ports, newPort(In, fmt.Sprintf("in_%d", i+1), port))
 	}

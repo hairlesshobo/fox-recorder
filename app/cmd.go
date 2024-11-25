@@ -57,7 +57,7 @@ var (
 				JackClientName:               "fox",
 				ProfileDirectory:             "",
 				LogLevel:                     int(slog.LevelDebug),
-				HardwarePortConnectionPrefix: "multiplier",
+				HardwarePortConnectionPrefix: "system:capture_", //"multiplier:out",
 			}
 
 			simulationOptins := &model.SimulationOptions{

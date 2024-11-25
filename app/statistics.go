@@ -91,10 +91,12 @@ func initStatistics(profile *model.Profile) chan bool {
 		bufferCount := 0
 
 		for _, port := range ports {
-			buffer := port.GetWriteBuffer()
+			if port.IsArmed() {
+				buffer := port.GetWriteBuffer()
 
-			bufferSum += float64(len(buffer)) / float64(cap(buffer))
-			bufferCount += 1
+				bufferSum += float64(len(buffer)) / float64(cap(buffer))
+				bufferCount += 1
+			}
 		}
 
 		bufferAvg := bufferSum / float64(bufferCount)
