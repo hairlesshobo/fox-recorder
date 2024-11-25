@@ -23,6 +23,7 @@
 package model
 
 type Profile struct {
+	Name        string             `yaml:"name"`
 	AudioServer ProfileAudioServer `yaml:"audio_server"`
 	Output      ProfileOutput      `yaml:"output"`
 	Channels    []ProfileChannel   `yaml:"channels"`

@@ -102,9 +102,9 @@ type Tui struct {
 	tvFormat          *custom.StatusText
 	tvFileSize        *custom.StatusText
 	tvErrorCount      *custom.StatusText
-	// tvProfileName     *custom.StatusText
-	// tvTakeName        *custom.StatusText
-	// tvDirectory       *custom.StatusText
+	tvProfileName     *custom.StatusText
+	tvTakeName        *custom.StatusText
+	tvDirectory       *custom.StatusText
 
 	meterDiskSpace   *custom.StatusMeter
 	meterBuffer      *custom.StatusMeter
@@ -162,9 +162,9 @@ func (tui *Tui) Initalize() {
 	tui.tvFormat = custom.NewStatusTextField(headerWidth, "Format", "Unknown")
 	tui.tvFileSize = custom.NewStatusTextField(headerWidth, "Session Size", "0 bytes")
 	tui.tvErrorCount = custom.NewStatusTextField(headerWidth, "Errors", "0")
-	// tui.tvProfileName = custom.NewStatusTextField(headerWidth, "Profile", "")
-	// tui.tvTakeName = custom.NewStatusTextField(headerWidth, "Take", "")
-	// tui.tvDirectory = custom.NewStatusTextField(headerWidth, "Directory", "")
+	tui.tvProfileName = custom.NewStatusTextField(headerWidth, "Profile", "")
+	tui.tvTakeName = custom.NewStatusTextField(headerWidth, "Take", "")
+	tui.tvDirectory = custom.NewStatusTextField(headerWidth, "Directory", "")
 
 	statusColOffset := 0
 	statusGrid.AddItem(tui.tvTransportStatus.GetGrid(), 0, statusColOffset, 1, 1, 0, 0, false)
@@ -172,6 +172,9 @@ func (tui *Tui) Initalize() {
 	statusGrid.AddItem(tui.tvFormat.GetGrid(), 2, statusColOffset, 1, 1, 0, 0, false)
 	statusGrid.AddItem(tui.tvFileSize.GetGrid(), 3, statusColOffset, 1, 1, 0, 0, false)
 	statusGrid.AddItem(tui.tvErrorCount.GetGrid(), 4, statusColOffset, 1, 1, 0, 0, false)
+	statusGrid.AddItem(tui.tvProfileName.GetGrid(), 5, statusColOffset, 1, 1, 0, 0, false)
+	statusGrid.AddItem(tui.tvTakeName.GetGrid(), 6, statusColOffset, 1, 1, 0, 0, false)
+	statusGrid.AddItem(tui.tvDirectory.GetGrid(), 7, statusColOffset, 1, 2, 0, 0, false)
 
 	tui.meterDiskSpace = custom.NewStatusMeter(headerWidth, "Disk Space", 0, "%")
 	tui.meterDiskLoad = custom.NewStatusMeter(headerWidth, "Disk Load", 0, "%")
@@ -345,6 +348,18 @@ func (tui *Tui) SetDuration(duration float64) {
 
 func (tui *Tui) SetAudioFormat(format string) {
 	tui.tvFormat.SetCurrentValue(format)
+}
+
+func (tui *Tui) SetProfileName(value string) {
+	tui.tvProfileName.SetCurrentValue(value)
+}
+
+func (tui *Tui) SetTakeName(value string) {
+	tui.tvTakeName.SetCurrentValue(value)
+}
+
+func (tui *Tui) SetDirectory(value string) {
+	tui.tvDirectory.SetCurrentValue(value)
 }
 
 func (tui *Tui) SetSessionSize(size uint64) {

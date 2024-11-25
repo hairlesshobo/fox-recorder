@@ -149,6 +149,9 @@ func runEngine(config *model.Config, profile *model.Profile, simulationOptions *
 		sampleRateStr := strconv.FormatFloat(float64(audioServer.GetSampleRate())/1000.0, 'f', -1, 64)
 		displayHandle.tui.SetAudioFormat(fmt.Sprintf("%dbit / %sKHz", profile.Output.BitDepth, sampleRateStr))
 		displayHandle.tui.SetTransportStatus(display.StatusRecording)
+		displayHandle.tui.SetProfileName(profile.Name)
+		displayHandle.tui.SetTakeName(profile.Output.Take)
+		displayHandle.tui.SetDirectory(profile.Output.Directory)
 
 		transportRecord = true
 	}

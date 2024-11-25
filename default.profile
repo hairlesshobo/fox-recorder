@@ -1,3 +1,4 @@
+name: "Default"
 audio_server:
   auto_start: true
   interface: 
