@@ -86,91 +86,96 @@ out:
 }
 
 func writeCycle(profile *model.Profile, finish bool) bool {
-	requiredSamples := int(profile.AudioServer.MinimumWriteSize * float64(profile.AudioServer.SampleRate))
+	requiredSamples := int(profile.Output.MinimumWriteSize * float64(profile.AudioServer.SampleRate))
 	samplesToRead := requiredSamples
 	factor := float32(math.Pow(2, float64(profile.Output.BitDepth)-1)) - 1.0
 
-	for _, channel := range outputFiles {
-		writeBuffers := channel.GetWriteBuffers()
+	// check if enough to write
+	if finish ||
+		(len(outputFiles) > 0 && len(outputFiles[0].GetWriteBuffers()[0]) > requiredSamples) {
 
-		// check if enough to write, then write
-		if len(writeBuffers[0]) > requiredSamples || finish {
-			// disk load statistics
-			if stats.diskProcessLastEndTime > 0 {
-				if len(stats.diskProcessIdleChan) < cap(stats.diskProcessIdleChan) {
-					stats.diskProcessIdleChan <- time.Now().UnixMicro() - stats.diskProcessLastEndTime
-				}
+		// disk load statistics
+		if stats.diskProcessLastEndTime > 0 {
+			if len(stats.diskProcessIdleChan) < cap(stats.diskProcessIdleChan) {
+				stats.diskProcessIdleChan <- time.Now().UnixMicro() - stats.diskProcessLastEndTime
 			}
-			stats.diskProcessLastStartTime = time.Now().UnixMicro()
+		}
+		stats.diskProcessLastStartTime = time.Now().UnixMicro()
 
-			if finish {
-				samplesToRead = len(writeBuffers[0])
-				slog.Debug(fmt.Sprintf("disk writer: reading remaining buffer samples: %d", samplesToRead))
-			}
+		for _, channel := range outputFiles {
+			// TODO: make sure channel is enabled
+			writeBuffers := channel.GetWriteBuffers()
 
-			util.TraceLog(fmt.Sprintf("Writing %d samples to file", samplesToRead))
-
-			if !channel.FileOpen {
-				slog.Error("Cannot write to closed file, " + channel.FileName)
-				reaper.Reap()
-				return false
-			}
-
-			for _, writeBuffer := range writeBuffers {
-				// TODO: do i want to limit this to the requiredSampels count or just drain what it has left?
-
-				//
-				// previous version
-				//
-
-				// fBuf := &audio.Float32Buffer{
-				// 	Data: getSamplesFromBuffer(samplesToRead, writeBuffer),
-				// 	Format: &audio.Format{
-				// 		NumChannels: int(channel.ChannelCount),
-				// 		SampleRate:  int(channel.SampleRate),
-				// 	},
-				// }
-
-				// transforms.PCMScaleF32(fBuf, profile.Output.BitDepth)
-
-				// iBuf := fBuf.AsIntBuffer()
-
-				// // TODO: add interleave support
-				// channel.Write(iBuf)
-
-				//
-				// new version
-				//
-				buf := &audio.IntBuffer{
-					Data: make([]int, samplesToRead),
-					Format: &audio.Format{
-						NumChannels: int(channel.ChannelCount),
-						SampleRate:  int(channel.SampleRate),
-					},
+			if len(writeBuffers[0]) > requiredSamples || finish {
+				if finish {
+					samplesToRead = len(writeBuffers[0])
+					slog.Debug(fmt.Sprintf("disk writer: reading remaining buffer samples: %d", samplesToRead))
 				}
 
-				// TODO: does this actually support 24 bit??
-				// for each sample we load, scale and cast to int
-				for i := 0; i < samplesToRead; i++ {
-					// populate the sample
-					// buf.Data[i] = <-writeBuffer
-					buf.Data[i] = int(<-writeBuffer * factor)
+				util.TraceLog(fmt.Sprintf("Writing %d samples to file", samplesToRead))
+
+				if !channel.FileOpen {
+					slog.Error("Cannot write to closed file, " + channel.FileName)
+					reaper.Reap()
+					return false
 				}
 
-				// TODO: add interleave support
-				channel.Write(buf)
-			}
+				for _, writeBuffer := range writeBuffers {
+					// TODO: do i want to limit this to the requiredSampels count or just drain what it has left?
 
-			if finish {
-				channel.Close()
-			}
+					//
+					// previous version
+					//
 
-			// audio load statistics
-			stats.diskProcessLastEndTime = time.Now().UnixMicro()
-			if len(stats.diskProcessElapsedChan) < cap(stats.diskProcessElapsedChan) {
-				stats.diskProcessElapsedChan <- stats.diskProcessLastEndTime - stats.diskProcessLastStartTime
+					// fBuf := &audio.Float32Buffer{
+					// 	Data: getSamplesFromBuffer(samplesToRead, writeBuffer),
+					// 	Format: &audio.Format{
+					// 		NumChannels: int(channel.ChannelCount),
+					// 		SampleRate:  int(channel.SampleRate),
+					// 	},
+					// }
 
+					// transforms.PCMScaleF32(fBuf, profile.Output.BitDepth)
+
+					// iBuf := fBuf.AsIntBuffer()
+
+					// // TODO: add interleave support
+					// channel.Write(iBuf)
+
+					//
+					// new version
+					//
+					buf := &audio.IntBuffer{
+						Data: make([]int, samplesToRead),
+						Format: &audio.Format{
+							NumChannels: int(channel.ChannelCount),
+							SampleRate:  int(channel.SampleRate),
+						},
+					}
+
+					// TODO: does this actually support 24 bit??
+					// for each sample we load, scale and cast to int
+					for i := 0; i < samplesToRead; i++ {
+						// populate the sample
+						// buf.Data[i] = <-writeBuffer
+						buf.Data[i] = int(<-writeBuffer * factor)
+					}
+
+					// TODO: add interleave support
+					channel.Write(buf)
+				}
+
+				if finish {
+					channel.Close()
+				}
 			}
+		}
+
+		// disk load statistics
+		stats.diskProcessLastEndTime = time.Now().UnixMicro()
+		if len(stats.diskProcessElapsedChan) < cap(stats.diskProcessElapsedChan) {
+			stats.diskProcessElapsedChan <- stats.diskProcessLastEndTime - stats.diskProcessLastStartTime
+
 		}
 	}
 

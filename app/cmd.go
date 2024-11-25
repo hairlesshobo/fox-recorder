@@ -26,6 +26,7 @@ import (
 	"log/slog"
 	"os"
 
+	"fox-audio/model"
 	"fox-audio/util"
 
 	"github.com/spf13/cobra"
@@ -51,7 +52,21 @@ var (
 
 			profile := util.ReadProfile(argProfileName)
 
-			runEngine(profile, argSimulate, argSimulateFreezeMeters, argSimulateChannelCount)
+			// TODO: read config file here
+			config := &model.Config{
+				JackClientName:               "fox",
+				ProfileDirectory:             "",
+				LogLevel:                     int(slog.LevelDebug),
+				HardwarePortConnectionPrefix: "multiplier",
+			}
+
+			simulationOptins := &model.SimulationOptions{
+				EnableSimulation: argSimulate,
+				FreezeMeters:     argSimulateFreezeMeters,
+				ChannelCount:     argSimulateChannelCount,
+			}
+
+			runEngine(config, profile, simulationOptins)
 		},
 	}
 )

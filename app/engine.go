@@ -25,6 +25,7 @@ package app
 import (
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"strconv"
 	"time"
@@ -35,9 +36,6 @@ import (
 	"fox-audio/reaper"
 	"fox-audio/shared"
 )
-
-// TODO: move to config
-const jackClientName = "fox"
 
 type displayObj struct {
 	tui *display.Tui
@@ -86,10 +84,10 @@ func ConfigureTuiLogger() {
 	shared.EnableSlogLogging()
 }
 
-func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool, simulateChannelCount int) {
+func runEngine(config *model.Config, profile *model.Profile, simulationOptions *model.SimulationOptions) {
 	displayHandle.tui = display.NewTui()
 	displayHandle.tui.Initalize()
-	displayHandle.tui.SetTransportStatus(3)
+	displayHandle.tui.SetTransportStatus(display.StatusStarting)
 	displayHandle.tui.Start()
 	reaper.Callback("tui", displayHandle.tui.Shutdown)
 
@@ -102,8 +100,8 @@ func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool,
 	ConfigureTuiLogger()
 	// ConfigureFileLogger()
 
-	if !simulate {
-		audioServer = audio.NewServer(jackClientName, profile)
+	if !simulationOptions.EnableSimulation {
+		audioServer = audio.NewServer(config, profile)
 		audioServer.SetErrorCallback(jackError)
 		audioServer.SetInfoCallback(jackInfo)
 
@@ -112,16 +110,25 @@ func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool,
 			reaper.Reap()
 		})
 
-		audioServer.StartServer()
-		reaper.Callback("stop jack server", audioServer.StopServer)
+		if profile.AudioServer.AutoStart {
+			audioServer.StartServer()
+			reaper.Callback("stop jack server", audioServer.StopServer)
+		}
+
+		displayHandle.tui.SetTransportStatus(display.StatusPaused)
+
+		audioServer.Connect()
+		reaper.Callback("disconnect jack server", audioServer.Disconnect)
+
+		// set cycle buffer size .. this needs to be proportional to the disk
+		// buffer so that the buffer has time to fill before the jack processor
+		// deadlocks waiting for data to be processed
+		cycleBufferSize := int(math.Ceil(float64(audioServer.GetSampleRate())*float64(int(profile.Output.BufferSizeSeconds))) / float64(audioServer.GetFramesPerPeriod()))
+		cycleDoneChannel = make(chan bool, cycleBufferSize*5)
 
 		ports = audioServer.GetInputPorts()
 		displayHandle.tui.SetChannelCount(len(ports))
 		signalLevels = make([]*model.SignalLevel, len(ports))
-		displayHandle.tui.SetTransportStatus(0)
-
-		audioServer.Connect()
-		reaper.Callback("disconnect jack server", audioServer.Disconnect)
 
 		// only register input ports, for now
 		audioServer.RegisterPorts(true, false)
@@ -129,7 +136,7 @@ func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool,
 		// set callbacks
 		audioServer.SetProcessCallback(jackProcess)
 		audioServer.SetXrunCallback(jackXrun)
-		audioServer.SetShutdownCallback(func() { jackShutdown(audioServer) })
+		audioServer.SetShutdownCallback(jackShutdown)
 
 		audioServer.ActivateClient()
 
@@ -142,14 +149,19 @@ func runEngine(profile *model.Profile, simulate bool, simulateFreezeMeters bool,
 		sampleRateStr := strconv.FormatFloat(float64(audioServer.GetSampleRate())/1000.0, 'f', -1, 64)
 		displayHandle.tui.SetAudioFormat(fmt.Sprintf("%dbit / %sKHz", profile.Output.BitDepth, sampleRateStr))
 		displayHandle.tui.SetTransportStatus(display.StatusRecording)
+
+		transportRecord = true
 	}
 
 	// this blocks until the jack connection shuts down
-	if simulate {
-		displayHandle.tui.SetChannelCount(simulateChannelCount)
-		startSimulation(simulateFreezeMeters, simulateChannelCount)
+	if simulationOptions.EnableSimulation {
+		displayHandle.tui.SetChannelCount(simulationOptions.ChannelCount)
+		startSimulation(simulationOptions)
 	}
 
-	reaper.Callback("shutdown status", func() { displayHandle.tui.SetTransportStatus(display.StatusShuttingDown) })
+	reaper.Callback("shutdown status", func() {
+		transportRecord = false
+		displayHandle.tui.SetTransportStatus(display.StatusShuttingDown)
+	})
 	reaper.Wait()
 }

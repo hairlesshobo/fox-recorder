@@ -47,7 +47,9 @@ func (of *OutputFile) GetWriteBuffers() []chan float32 {
 	buffers := make([]chan float32, len(of.InputPorts))
 
 	for i, port := range of.InputPorts {
-		buffers[i] = port.buffer
+		if port != nil && port.buffer != nil {
+			buffers[i] = port.buffer
+		}
 	}
 
 	return buffers

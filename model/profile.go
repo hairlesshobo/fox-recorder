@@ -29,11 +29,10 @@ type Profile struct {
 }
 
 type ProfileAudioServer struct {
-	Interface         []string `yaml:"interface"`
-	SampleRate        int      `yaml:"sample_rate"`
-	FramesPerPeriod   int      `yaml:"frames_per_period"`
-	BufferSizeSeconds float64  `yaml:"buffer_size_seconds"`
-	MinimumWriteSize  float64  `yaml:"minimum_write_size"`
+	AutoStart       bool     `yaml:"auto_start"`
+	Interface       []string `yaml:"interface"`
+	SampleRate      int      `yaml:"sample_rate"`
+	FramesPerPeriod int      `yaml:"frames_per_period"`
 }
 
 type ProfileChannel struct {
@@ -43,9 +42,11 @@ type ProfileChannel struct {
 }
 
 type ProfileOutput struct {
-	DirectoryTemplate string `yaml:"directory_template"`
-	Format            string `yaml:"format"`
-	BitDepth          int    `yaml:"bit_depth"`
+	DirectoryTemplate string  `yaml:"directory_template"`
+	BufferSizeSeconds float64 `yaml:"buffer_size_seconds"`
+	MinimumWriteSize  float64 `yaml:"minimum_write_size"`
+	Format            string  `yaml:"format"`
+	BitDepth          int     `yaml:"bit_depth"`
 
 	// these are calculated at runtime and used internally, but
 	// not able to be set in the profile

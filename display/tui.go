@@ -50,7 +50,7 @@ const (
 	StatusShuttingDown = 4
 
 	meterWidth       = 4
-	samplesToAverage = 4
+	samplesToAverage = 5
 )
 
 //
@@ -86,6 +86,7 @@ type Tui struct {
 	// jackServerStatus      int    // 0 = not running, 1 = running, 2 = running with warnings, 3 = terminated
 	// armedChannelCount     int
 	// connectedChannelCount int
+
 	diskPerformance   []int
 	bufferUtilization []int
 	audioLoad         []int
@@ -101,6 +102,9 @@ type Tui struct {
 	tvFormat          *custom.StatusText
 	tvFileSize        *custom.StatusText
 	tvErrorCount      *custom.StatusText
+	// tvProfileName     *custom.StatusText
+	// tvTakeName        *custom.StatusText
+	// tvDirectory       *custom.StatusText
 
 	meterDiskSpace   *custom.StatusMeter
 	meterBuffer      *custom.StatusMeter
@@ -115,8 +119,9 @@ type Tui struct {
 
 func NewTui() *Tui {
 	tui := &Tui{
-		shutdownChannel:   make(chan bool, 1),
-		errorCount:        0,
+		shutdownChannel: make(chan bool, 1),
+		errorCount:      0,
+
 		diskPerformance:   make([]int, samplesToAverage),
 		bufferUtilization: make([]int, samplesToAverage),
 		audioLoad:         make([]int, samplesToAverage),
@@ -157,6 +162,9 @@ func (tui *Tui) Initalize() {
 	tui.tvFormat = custom.NewStatusTextField(headerWidth, "Format", "Unknown")
 	tui.tvFileSize = custom.NewStatusTextField(headerWidth, "Session Size", "0 bytes")
 	tui.tvErrorCount = custom.NewStatusTextField(headerWidth, "Errors", "0")
+	// tui.tvProfileName = custom.NewStatusTextField(headerWidth, "Profile", "")
+	// tui.tvTakeName = custom.NewStatusTextField(headerWidth, "Take", "")
+	// tui.tvDirectory = custom.NewStatusTextField(headerWidth, "Directory", "")
 
 	statusColOffset := 0
 	statusGrid.AddItem(tui.tvTransportStatus.GetGrid(), 0, statusColOffset, 1, 1, 0, 0, false)
@@ -166,17 +174,17 @@ func (tui *Tui) Initalize() {
 	statusGrid.AddItem(tui.tvErrorCount.GetGrid(), 4, statusColOffset, 1, 1, 0, 0, false)
 
 	tui.meterDiskSpace = custom.NewStatusMeter(headerWidth, "Disk Space", 0, "%")
+	tui.meterDiskLoad = custom.NewStatusMeter(headerWidth, "Disk Load", 0, "%")
+	tui.meterAudioLoad = custom.NewStatusMeter(headerWidth, "Audio Load", 0, "%")
 	tui.meterBuffer = custom.NewStatusMeter(headerWidth, "Buffer", 0, "%")
 	tui.meterCycleBuffer = custom.NewStatusMeter(headerWidth, "Cycle Buffer", 0, "%")
-	tui.meterAudioLoad = custom.NewStatusMeter(headerWidth, "Audio Load", 0, "%")
-	tui.meterDiskLoad = custom.NewStatusMeter(headerWidth, "Disk Load", 0, "%")
 
 	meterColOffset := 1
 	statusGrid.AddItem(tui.meterDiskSpace.GetGrid(), 0, meterColOffset, 1, 1, 0, 0, false)
-	statusGrid.AddItem(tui.meterBuffer.GetGrid(), 1, meterColOffset, 1, 1, 0, 0, false)
+	statusGrid.AddItem(tui.meterDiskLoad.GetGrid(), 1, meterColOffset, 1, 1, 0, 0, false)
 	statusGrid.AddItem(tui.meterAudioLoad.GetGrid(), 2, meterColOffset, 1, 1, 0, 0, false)
-	statusGrid.AddItem(tui.meterCycleBuffer.GetGrid(), 3, meterColOffset, 1, 1, 0, 0, false)
-	statusGrid.AddItem(tui.meterDiskLoad.GetGrid(), 4, meterColOffset, 1, 1, 0, 0, false)
+	statusGrid.AddItem(tui.meterBuffer.GetGrid(), 3, meterColOffset, 1, 1, 0, 0, false)
+	statusGrid.AddItem(tui.meterCycleBuffer.GetGrid(), 4, meterColOffset, 1, 1, 0, 0, false)
 	tui.appGrid.AddItem(statusGrid, 0, 0, 1, 1, 0, 0, false)
 
 	tui.metersGrid = cview.NewGrid()
@@ -258,10 +266,38 @@ func (tui *Tui) excecuteLoop() {
 		}
 
 		tui.app.QueueUpdateDraw(func() {})
-		time.Sleep(25 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 	}
 
 	fmt.Println("shutting down tui")
+}
+
+func (tui *Tui) updateMeter(meter *custom.StatusMeter, value, warnPct, cautionPct int) {
+	color := tcell.ColorDefault
+
+	if value <= warnPct {
+		color = theme.Green
+	} else if value <= cautionPct {
+		color = theme.Yellow
+	} else {
+		color = theme.Red
+	}
+
+	meter.SetCurrentValue(value)
+	meter.SetColor(color)
+}
+
+// TODO: Move averaging into statistics package
+func getStatisticAverage(array []int) int {
+	sum := 0
+	count := 0
+
+	for i := 0; i < len(array); i++ {
+		sum += array[i]
+		count++
+	}
+
+	return int(math.Round(float64(sum) / float64(count)))
 }
 
 //
@@ -315,85 +351,24 @@ func (tui *Tui) SetSessionSize(size uint64) {
 	tui.tvFileSize.SetCurrentValue(util.FormatSize(size))
 }
 
-// cycleBuffer
-// diskWriterLoad
+func (tui *Tui) IncrementErrorCount() {
+	tui.errorCount++
+	tui.tvErrorCount.SetCurrentValue(fmt.Sprintf("%d", tui.errorCount))
+
+	if tui.errorCount > 0 {
+		tui.tvErrorCount.SetColor(theme.Red)
+	}
+}
+
+//
+// channel strips
+//
 
 func (tui *Tui) UpdateSignalLevels(levels []*model.SignalLevel) {
 	for i := range levels {
 		level := levels[i]
 		tui.meters[i].SetLevel(level.Instant)
 	}
-}
-
-func (tui *Tui) updateMeter(meter *custom.StatusMeter, value, warnPct, cautionPct int) {
-	color := tcell.ColorDefault
-
-	if value <= warnPct {
-		color = theme.Green
-	} else if value <= cautionPct {
-		color = theme.Yellow
-	} else {
-		color = theme.Red
-	}
-
-	meter.SetCurrentValue(value)
-	meter.SetColor(color)
-}
-
-func (tui *Tui) SetAudioLoad(percent int) {
-	tui.audioLoad = append(tui.audioLoad, percent)
-
-	if len(tui.audioLoad) > samplesToAverage {
-		tui.audioLoad = tui.audioLoad[1:]
-	}
-
-	tui.updateMeter(tui.meterAudioLoad, getAverage(tui.audioLoad), 20, 50)
-}
-
-func (tui *Tui) SetDiskUsage(percent int) {
-	tui.updateMeter(tui.meterDiskSpace, percent, 20, 50)
-}
-
-func (tui *Tui) SetBufferUtilization(percent int) {
-	tui.bufferUtilization = append(tui.bufferUtilization, percent)
-
-	if len(tui.bufferUtilization) > samplesToAverage {
-		tui.bufferUtilization = tui.bufferUtilization[1:]
-	}
-
-	tui.updateMeter(tui.meterBuffer, getAverage(tui.bufferUtilization), 50, 75)
-}
-
-func (tui *Tui) SetDiskLoad(percent int) {
-	tui.diskPerformance = append(tui.diskPerformance, percent)
-
-	if len(tui.diskPerformance) > samplesToAverage {
-		tui.diskPerformance = tui.diskPerformance[1:]
-	}
-
-	tui.updateMeter(tui.meterDiskLoad, getAverage(tui.diskPerformance), 50, 75)
-}
-
-func getAverage(array []int) int {
-	sum := 0
-	count := 0
-
-	for i := 0; i < len(array); i++ {
-		sum += array[i]
-		count++
-	}
-
-	return int(math.Round(float64(sum) / float64(count)))
-}
-
-func (tui *Tui) SetCycleBuffer(percent int) {
-	tui.cyleLoad = append(tui.cyleLoad, percent)
-
-	if len(tui.cyleLoad) > samplesToAverage {
-		tui.cyleLoad = tui.cyleLoad[1:]
-	}
-
-	tui.updateMeter(tui.meterCycleBuffer, getAverage(tui.cyleLoad), 20, 50)
 }
 
 func (tui *Tui) SetChannelCount(channelCount int) {
@@ -442,15 +417,62 @@ func (tui *Tui) SetChannelCount(channelCount int) {
 	}
 }
 
+//
+// logging
+//
+
 func (tui *Tui) WriteLog(message string) {
 	tui.tvLogs.Write([]byte(fmt.Sprintf("[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), message)))
 }
 
-func (tui *Tui) IncrementErrorCount() {
-	tui.errorCount++
-	tui.tvErrorCount.SetCurrentValue(fmt.Sprintf("%d", tui.errorCount))
+//
+// status meters
+//
 
-	if tui.errorCount > 0 {
-		tui.tvErrorCount.SetColor(theme.Red)
+func (tui *Tui) SetAudioLoad(percent int) {
+	tui.audioLoad = append(tui.audioLoad, percent)
+
+	if len(tui.audioLoad) > samplesToAverage {
+		tui.audioLoad = tui.audioLoad[1:]
 	}
+
+	tui.updateMeter(tui.meterAudioLoad, getStatisticAverage(tui.audioLoad), 20, 50)
+	// tui.updateMeter(tui.meterAudioLoad, percent, 20, 50)
+}
+
+func (tui *Tui) SetDiskUsage(percent int) {
+	tui.updateMeter(tui.meterDiskSpace, percent, 20, 50)
+}
+
+func (tui *Tui) SetBufferUtilization(percent int) {
+	tui.bufferUtilization = append(tui.bufferUtilization, percent)
+
+	if len(tui.bufferUtilization) > samplesToAverage {
+		tui.bufferUtilization = tui.bufferUtilization[1:]
+	}
+
+	tui.updateMeter(tui.meterBuffer, getStatisticAverage(tui.bufferUtilization), 50, 75)
+	// tui.updateMeter(tui.meterBuffer, percent, 50, 75)
+}
+
+func (tui *Tui) SetDiskLoad(percent int) {
+	tui.diskPerformance = append(tui.diskPerformance, percent)
+
+	if len(tui.diskPerformance) > samplesToAverage {
+		tui.diskPerformance = tui.diskPerformance[1:]
+	}
+
+	tui.updateMeter(tui.meterDiskLoad, getStatisticAverage(tui.diskPerformance), 50, 75)
+	// tui.updateMeter(tui.meterDiskLoad, percent, 50, 75)
+}
+
+func (tui *Tui) SetCycleBuffer(percent int) {
+	tui.cyleLoad = append(tui.cyleLoad, percent)
+
+	if len(tui.cyleLoad) > samplesToAverage {
+		tui.cyleLoad = tui.cyleLoad[1:]
+	}
+
+	tui.updateMeter(tui.meterCycleBuffer, getStatisticAverage(tui.cyleLoad), 20, 50)
+	// tui.updateMeter(tui.meterCycleBuffer, percent, 20, 50)
 }

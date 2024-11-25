@@ -22,9 +22,8 @@
 // =================================================================================
 package model
 
-type Config struct {
-	JackClientName               string
-	ProfileDirectory             string
-	LogLevel                     int
-	HardwarePortConnectionPrefix string
+type SimulationOptions struct {
+	EnableSimulation bool
+	FreezeMeters     bool
+	ChannelCount     int
 }

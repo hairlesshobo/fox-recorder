@@ -29,7 +29,6 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -42,9 +41,9 @@ import (
 )
 
 type JackServer struct {
+	config  *model.Config
 	profile *model.Profile
 
-	clientName      string
 	audioInterface  string
 	driver          string
 	device          string
@@ -62,14 +61,14 @@ type JackServer struct {
 	cmd *exec.Cmd
 }
 
-func NewServer(clientName string, profile *model.Profile) *JackServer {
+func NewServer(config *model.Config, profile *model.Profile) *JackServer {
 	audioInterfaceParts := strings.Split(profile.AudioServer.Interface[0], "/")
 
 	// TODO: add support for trying multiple audio interfaces
 	server := JackServer{
+		config:  config,
 		profile: profile,
 
-		clientName:      clientName,
 		audioInterface:  profile.AudioServer.Interface[0],
 		sampleRate:      profile.AudioServer.SampleRate,
 		framesPerPeriod: profile.AudioServer.FramesPerPeriod,
@@ -114,12 +113,12 @@ func (server *JackServer) StartServer() {
 		// TODO: handle jack stderr
 
 		if err != nil {
-			slog.Error("Error occurred running 'diskutil activity' command: " + err.Error())
+			slog.Error("Error occurred running 'jackd' command: " + err.Error())
 			return
 		}
 
 		if err = server.cmd.Start(); err != nil {
-			slog.Error("Error occurred starting 'diskutil activity' command: " + err.Error())
+			slog.Error("Error occurred starting 'jackd' command: " + err.Error())
 			return
 		}
 
@@ -130,24 +129,7 @@ func (server *JackServer) StartServer() {
 
 			slog.Debug("jackd: " + line)
 
-			// found input channel
-			if strings.Contains(line, "JACK input port =") {
-				parts := strings.Split(line, " ==> ")         // Input channel = 0 ==> JACK input port = 0
-				inputDescriptor := parts[1]                   // JACK input port = 0
-				parts = strings.Split(inputDescriptor, " = ") // 0
-				inputNum, _ := strconv.Atoi(strings.Trim(parts[1], ""))
-				inputNum++
-
-				server.ports = append(server.ports, newPort(In, fmt.Sprintf("in_%d", inputNum), fmt.Sprintf("system:capture_%d", inputNum)))
-			} else if strings.Contains(line, "JACK output port =") {
-				parts := strings.Split(line, " ==> ")          // JACK output port = 1 ==> output channel = 1
-				outputDescriptor := parts[0]                   // JACK output port = 1
-				parts = strings.Split(outputDescriptor, " = ") // 1
-				outputNum, _ := strconv.Atoi(strings.Trim(parts[1], ""))
-				outputNum++
-
-				server.ports = append(server.ports, newPort(Out, fmt.Sprintf("out_%d", outputNum), fmt.Sprintf("system:playback_%d", outputNum)))
-			} else if strings.Contains(line, "driver is running...") {
+			if strings.Contains(line, "driver is running...") {
 				ready <- true
 			}
 		}
@@ -174,7 +156,7 @@ func (server *JackServer) Connect() {
 	slog.Info("Connecting to JACK server")
 
 	var jackStatus int
-	server.jackClient, jackStatus = jack.ClientOpen(server.clientName, jack.NoStartServer)
+	server.jackClient, jackStatus = jack.ClientOpen(server.config.JackClientName, jack.NoStartServer)
 
 	if jackStatus != 0 {
 		slog.Error(fmt.Sprintf("JACK Status: %s", jack.StrError(jackStatus)))
@@ -184,6 +166,31 @@ func (server *JackServer) Connect() {
 	server.clientConnected = true
 
 	slog.Info("JACK server connected")
+
+	server.getPorts()
+}
+
+func (server *JackServer) GetFramesPerPeriod() int {
+	return int(server.jackClient.GetBufferSize())
+}
+
+func (server *JackServer) GetSampleRate() int {
+	return int(server.jackClient.GetSampleRate())
+}
+
+func (server *JackServer) getPorts() {
+	// get input ports
+	inputPorts := server.jackClient.GetPorts(server.config.HardwarePortConnectionPrefix+":out*", "", jack.PortIsOutput) // | jack.PortIsPhysical)
+	for i, port := range inputPorts {
+		server.ports = append(server.ports, newPort(In, fmt.Sprintf("in_%d", i+1), port))
+	}
+
+	// get output ports
+	// outputPorts := server.jackClient.GetPorts("", "", jack.PortIsInput|jack.PortIsPhysical)
+	// for i, port := range outputPorts {
+	// 	// server.ports = append(server.ports, newPort(Out, fmt.Sprintf("out_%d", outputNum), fmt.Sprintf("system:playback_%d", outputNum)))
+	// 	server.ports = append(server.ports, newPort(In, fmt.Sprintf("out_%d", i+1), port))
+	// }
 }
 
 func (server *JackServer) Disconnect() {
@@ -231,9 +238,9 @@ func (server *JackServer) DisconnectAllPorts() {
 
 		if port.portDirection == In {
 			inName = port.jackName
-			outName = fmt.Sprintf("%s:%s", server.clientName, port.myName)
+			outName = fmt.Sprintf("%s:%s", server.config.JackClientName, port.myName)
 		} else if port.portDirection == Out {
-			inName = fmt.Sprintf("%s:%s", server.clientName, port.myName)
+			inName = fmt.Sprintf("%s:%s", server.config.JackClientName, port.myName)
 			outName = port.jackName
 		}
 
@@ -247,9 +254,13 @@ func (server *JackServer) GetAllPorts() []*Port {
 	return server.ports
 }
 
-func (server *JackServer) findJackPort(name string) *Port {
+func (server *JackServer) findJackPort(name string, portDirection PortDirection) *Port {
 	for _, port := range server.ports {
-		if port.jackName == name {
+		if port.portDirection != portDirection {
+			continue
+		}
+
+		if strings.HasSuffix(port.jackName, name) {
 			return port
 		}
 	}
@@ -292,12 +303,12 @@ func (server *JackServer) PrepareOutputFiles() {
 		outputFile.Encoder = wav.NewEncoder(outputFile.FileHandle, outputFile.SampleRate, outputFile.BitDepth, len(channel.Ports), 1)
 
 		for channelNum, channelPort := range channel.Ports {
-			jackPort := server.findJackPort(fmt.Sprintf("system:capture_%d", channelPort))
+			jackPort := server.findJackPort(fmt.Sprintf("%d", channelPort), In)
 
 			if jackPort != nil {
 				outputFile.InputPorts[channelNum] = jackPort
 
-				success := jackPort.AllocateBuffer(int(float64(server.profile.AudioServer.SampleRate) * server.profile.AudioServer.BufferSizeSeconds))
+				success := jackPort.AllocateBuffer(int(float64(server.profile.AudioServer.SampleRate) * server.profile.Output.BufferSizeSeconds))
 
 				// TODO: make sure a port can only be assigned once - add channel to port and compare that its not a different channel
 				if !success {
@@ -383,10 +394,6 @@ func (server *JackServer) SetXrunCallback(callback func() int) {
 	server.jackClient.SetXRunCallback(callback)
 }
 
-func (server *JackServer) GetSampleRate() uint32 {
-	return server.jackClient.GetSampleRate()
-}
-
 func (server *JackServer) CloseOutputFiles() {
 	for _, outputFile := range server.outputFiles {
 		outputFile.Close()
@@ -426,13 +433,13 @@ func (server *JackServer) ConnectPorts(connectInput bool, connectOutput bool) {
 			}
 
 			inName = port.jackName
-			outName = fmt.Sprintf("%s:%s", server.clientName, port.myName)
+			outName = fmt.Sprintf("%s:%s", server.config.JackClientName, port.myName)
 		} else if port.portDirection == Out {
 			if !connectOutput {
 				continue
 			}
 
-			inName = fmt.Sprintf("%s:%s", server.clientName, port.myName)
+			inName = fmt.Sprintf("%s:%s", server.config.JackClientName, port.myName)
 			outName = port.jackName
 		}
 

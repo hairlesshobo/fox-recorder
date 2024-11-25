@@ -26,7 +26,6 @@ import (
 	"log/slog"
 	"time"
 
-	"fox-audio/audio"
 	"fox-audio/model"
 	"fox-audio/reaper"
 	"fox-audio/util"
@@ -35,11 +34,12 @@ import (
 var (
 	signalLevels     []*model.SignalLevel
 	cycleDoneChannel chan bool
+
+	transportRecord bool
 )
 
 func init() {
-	// TODO: does this need to change - do we need to track this channel fill ratio too?
-	cycleDoneChannel = make(chan bool, 30)
+	transportRecord = false
 }
 
 func jackError(message string) {
@@ -54,9 +54,8 @@ func jackInfo(message string) {
 	slog.Info("JACK client: " + message)
 }
 
-func jackShutdown(server *audio.JackServer) {
+func jackShutdown() {
 	slog.Info("JACK client: connection is shutting down")
-	server.StopServer()
 }
 
 func jackXrun() int {
@@ -74,6 +73,10 @@ func jackProcess(nframes uint32) int {
 	}
 
 	stats.jackProcessLastStartTime = time.Now().UnixMicro()
+
+	if !reaper.Reaped() && transportRecord {
+		stats.framesProcessed += uint64(nframes)
+	}
 
 	// loop through the input channels
 	for portNum, port := range ports {
@@ -96,6 +99,10 @@ func jackProcess(nframes uint32) int {
 				Instant: int(util.AmplitudeToDb(sigLevel)),
 			}
 
+			// TODO: make a transport class
+			if !transportRecord {
+				continue
+			}
 			// TODO: add a check to make sure recording is enabled
 
 			// if it has a buffer, its enabled

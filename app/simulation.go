@@ -30,12 +30,12 @@ import (
 	"fox-audio/reaper"
 )
 
-func startSimulation(freezeMeters bool, channelCount int) {
+func startSimulation(simulationOptions *model.SimulationOptions) {
 	reaper.Register("simulation")
 
 	go func() {
 		t := time.NewTicker(150 * time.Millisecond)
-		levels := make([]*model.SignalLevel, channelCount)
+		levels := make([]*model.SignalLevel, simulationOptions.ChannelCount)
 
 		displayHandle.tui.SetTransportStatus(2)
 		displayHandle.tui.SetAudioFormat("24 bit / 48k WAV")
@@ -49,7 +49,7 @@ func startSimulation(freezeMeters bool, channelCount int) {
 				break
 			}
 
-			for channel := range channelCount {
+			for channel := range simulationOptions.ChannelCount {
 				newLevel := (rand.IntN(70) + 0) * (-1)
 
 				levels[channel] = &model.SignalLevel{
@@ -61,7 +61,7 @@ func startSimulation(freezeMeters bool, channelCount int) {
 			displayHandle.tui.UpdateSignalLevels(levels)
 			displayHandle.tui.SetSessionSize(size)
 
-			if freezeMeters {
+			if simulationOptions.FreezeMeters {
 				break
 			}
 		}
