@@ -32,6 +32,10 @@ import (
 	"fox-audio/util"
 )
 
+const (
+	samplesToAverage = 5
+)
+
 var (
 	stats statistics
 )
@@ -50,6 +54,11 @@ type statistics struct {
 	shutdownChan     chan bool
 	samplesProcessed uint64
 	framesProcessed  uint64
+
+	diskPerformance   []float64
+	bufferUtilization []float64
+	audioLoad         []float64
+	cycleLoad         []float64
 }
 
 func initStatistics(profile *model.Profile) chan bool {
@@ -62,6 +71,11 @@ func initStatistics(profile *model.Profile) chan bool {
 
 		shutdownChan:     make(chan bool, 5),
 		samplesProcessed: 0,
+
+		diskPerformance:   make([]float64, samplesToAverage),
+		bufferUtilization: make([]float64, samplesToAverage),
+		audioLoad:         make([]float64, samplesToAverage),
+		cycleLoad:         make([]float64, samplesToAverage),
 	}
 
 	channels := 0
@@ -99,11 +113,14 @@ func initStatistics(profile *model.Profile) chan bool {
 			}
 		}
 
-		bufferAvg := bufferSum / float64(bufferCount)
+		bufferPct := bufferSum / float64(bufferCount)
 
-		if !math.IsNaN(bufferAvg) {
-			displayHandle.tui.SetBufferUtilization(int(math.Round(bufferAvg * 100.0)))
-			util.TraceLog(fmt.Sprintf("buffer: %0.2f%%", bufferAvg*100.0))
+		if !math.IsNaN(bufferPct) {
+			stats.bufferUtilization = pushStatistic(stats.bufferUtilization, bufferPct, samplesToAverage)
+			avgBufferPct := math.Round(averageStatistic(stats.cycleLoad) * 100.0)
+
+			displayHandle.tui.SetBufferUtilization(int(avgBufferPct))
+			util.TraceLog(fmt.Sprintf("buffer: %0.2f%%", avgBufferPct))
 		}
 	})
 
@@ -117,8 +134,11 @@ func initStatistics(profile *model.Profile) chan bool {
 			diskLoadPct := float64(writeDuration) / (float64(idleDuration) + float64(writeDuration))
 
 			if !math.IsNaN(diskLoadPct) {
-				displayHandle.tui.SetDiskLoad(int(diskLoadPct * 100.0))
-				util.TraceLog(fmt.Sprintf("disk Idle time: %d us, Process time: %d us, load %0.3f%%", idleDuration, writeDuration, diskLoadPct*100.0))
+				stats.diskPerformance = pushStatistic(stats.diskPerformance, diskLoadPct, samplesToAverage)
+				avgDiskLoadPct := math.Round(averageStatistic(stats.cycleLoad) * 100.0)
+
+				displayHandle.tui.SetDiskLoad(int(avgDiskLoadPct))
+				util.TraceLog(fmt.Sprintf("disk Idle time: %d us, Process time: %d us, load %0.3f%%", idleDuration, writeDuration, avgDiskLoadPct))
 			}
 		}
 	}()
@@ -135,15 +155,21 @@ func initStatistics(profile *model.Profile) chan bool {
 			audioLoadPct := float64(writeDuration) / (float64(idleDuration) + float64(writeDuration))
 
 			if !math.IsNaN(audioLoadPct) {
-				displayHandle.tui.SetAudioLoad(int(audioLoadPct * 100.0))
-				util.TraceLog(fmt.Sprintf("audio Idle time: %d us, Process time: %d us, load %0.3f%%", idleDuration, writeDuration, audioLoadPct*100.0))
+				stats.audioLoad = pushStatistic(stats.audioLoad, audioLoadPct, samplesToAverage)
+				avgAudioLoadPct := math.Round(averageStatistic(stats.audioLoad) * 100.0)
+
+				displayHandle.tui.SetAudioLoad(int(avgAudioLoadPct))
+				util.TraceLog(fmt.Sprintf("audio Idle time: %d us, Process time: %d us, load %0.3f%%", idleDuration, writeDuration, avgAudioLoadPct))
 			}
 
 			// cycle buffer
 			cycleBuffer := float64(len(cycleDoneChannel)) / float64(cap(cycleDoneChannel))
 
 			if !math.IsNaN(cycleBuffer) {
-				displayHandle.tui.SetCycleBuffer(int(cycleBuffer * 100.0))
+				stats.cycleLoad = pushStatistic(stats.cycleLoad, cycleBuffer, samplesToAverage)
+				avgCycleBuffer := math.Round(averageStatistic(stats.cycleLoad) * 100.0)
+
+				displayHandle.tui.SetCycleBuffer(int(avgCycleBuffer))
 				util.TraceLog(fmt.Sprintf("cycle buffer: %03f%%", cycleBuffer))
 			}
 
@@ -174,4 +200,26 @@ func processOnInterval(name string, shutdownChan chan bool, milliseconds int, pr
 
 		reaper.Done(name)
 	}()
+}
+
+func pushStatistic(slice []float64, newValue float64, maxSamples int) []float64 {
+	slice = append(slice, newValue)
+
+	if len(slice) > maxSamples {
+		slice = slice[1:]
+	}
+
+	return slice
+}
+
+func averageStatistic(slice []float64) float64 {
+	sum := 0.0
+	count := 0
+
+	for i := 0; i < len(slice); i++ {
+		sum += slice[i]
+		count++
+	}
+
+	return sum / float64(count)
 }

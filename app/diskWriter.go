@@ -41,25 +41,6 @@ func startDiskWriter(profile *model.Profile) {
 	go diskWriter(profile)
 }
 
-// func getSamplesFromBuffer(sampleCount int, writeBuffer chan float32) []float32 {
-// 	currentBufferLen := len(writeBuffer)
-
-// 	if currentBufferLen < sampleCount {
-// 		// this should never happen
-// 		slog.Error(fmt.Sprintf("Requested %d samples but only have %d", sampleCount, currentBufferLen))
-// 	}
-
-// 	samples := make([]float32, sampleCount)
-
-// 	for i := 0; i < sampleCount; i++ {
-// 		// populate the sample
-// 		sample := <-writeBuffer
-// 		samples[i] = sample
-// 	}
-
-// 	return samples
-// }
-
 func diskWriter(profile *model.Profile) {
 out:
 	for {
@@ -124,24 +105,6 @@ func writeCycle(profile *model.Profile, finish bool) bool {
 
 				for _, writeBuffer := range writeBuffers {
 					//
-					// previous version
-					//
-
-					// fBuf := &audio.Float32Buffer{
-					// 	Data: getSamplesFromBuffer(samplesToRead, writeBuffer),
-					// 	Format: &audio.Format{
-					// 		NumChannels: int(channel.ChannelCount),
-					// 		SampleRate:  int(channel.SampleRate),
-					// 	},
-					// }
-
-					// transforms.PCMScaleF32(fBuf, profile.Output.BitDepth)
-
-					// iBuf := fBuf.AsIntBuffer()
-
-					// channel.Write(iBuf)
-
-					//
 					// new version
 					//
 					buf := &audio.IntBuffer{
@@ -152,11 +115,8 @@ func writeCycle(profile *model.Profile, finish bool) bool {
 						},
 					}
 
-					// TODO: does this actually support 24 bit??
 					// for each sample we load, scale and cast to int
 					for i := 0; i < samplesToRead; i++ {
-						// populate the sample
-						// buf.Data[i] = <-writeBuffer
 						buf.Data[i] = int(<-writeBuffer * factor)
 					}
 
