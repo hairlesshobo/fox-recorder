@@ -34,7 +34,8 @@ const (
 	SoftGreen = tcell.Color72
 	Yellow    = tcell.Color142
 
-	MeterAlternateBackground = tcell.Color233
+	LevelMeterAlternateBackgroundColor = tcell.Color233
+	LevelMeterDisarmdFillColor         = tcell.Color242
 )
 
 // 0:    theme.Red, // 124?

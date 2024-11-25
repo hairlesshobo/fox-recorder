@@ -16,8 +16,7 @@ output:
   bit_depth: 16
 
 channels:  
-  - ports: 
-    - 1
-    channel_name: internal_mic
-    enabled: true
+  - channel_name: internal_mic
+    ports: [1]
+    disabled: false
 

@@ -103,20 +103,19 @@ func jackProcess(nframes uint32) int {
 			if !transportRecord {
 				continue
 			}
-			// TODO: add a check to make sure recording is enabled
 
-			// if it has a buffer, its enabled
-			// TODO: change this to an explicit Enabled flag?
-			writeBuffer := port.GetWriteBuffer()
-			if cap(writeBuffer) > 0 {
-				if (len(writeBuffer) + int(nframes)) < cap(writeBuffer) {
-					stats.samplesProcessed += uint64(nframes)
+			if port.IsArmed() {
+				writeBuffer := port.GetWriteBuffer()
+				if cap(writeBuffer) > 0 {
+					if (len(writeBuffer) + int(nframes)) < cap(writeBuffer) {
+						stats.samplesProcessed += uint64(nframes)
 
-					for _, sample := range samplesIn {
-						writeBuffer <- float32(sample)
+						for _, sample := range samplesIn {
+							writeBuffer <- float32(sample)
+						}
+					} else {
+						slog.Error("No space left in write buffer!!")
 					}
-				} else {
-					slog.Error("No space left in write buffer!!")
 				}
 			}
 		} else {

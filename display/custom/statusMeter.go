@@ -55,7 +55,6 @@ func NewStatusMeter(headerWidth int, name string, initialValue int, unit string)
 	meter.grid.SetColumns(columns...)
 	meter.grid.SetRows(1)
 
-	// TODO: make value view conditional
 	meter.headerView = cview.NewTextView()
 	meter.headerView.SetTextAlign(cview.AlignRight)
 	meter.SetHeader(name)

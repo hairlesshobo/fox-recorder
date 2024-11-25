@@ -126,12 +126,18 @@ func runEngine(config *model.Config, profile *model.Profile, simulationOptions *
 		cycleBufferSize := int(math.Ceil(float64(audioServer.GetSampleRate())*float64(int(profile.Output.BufferSizeSeconds))) / float64(audioServer.GetFramesPerPeriod()))
 		cycleDoneChannel = make(chan bool, cycleBufferSize*5)
 
+		// only register input ports, for now
+		audioServer.RegisterPorts(true, false)
+
+		audioServer.PrepareOutputFiles()
+
 		ports = audioServer.GetInputPorts()
 		displayHandle.tui.SetChannelCount(len(ports))
 		signalLevels = make([]*model.SignalLevel, len(ports))
 
-		// only register input ports, for now
-		audioServer.RegisterPorts(true, false)
+		for i, port := range ports {
+			displayHandle.tui.SetChannelArmStatus(i, port.IsArmed())
+		}
 
 		// set callbacks
 		audioServer.SetProcessCallback(jackProcess)
@@ -140,14 +146,13 @@ func runEngine(config *model.Config, profile *model.Profile, simulationOptions *
 
 		audioServer.ActivateClient()
 
-		audioServer.PrepareOutputFiles()
 		outputFiles = audioServer.GetOutputFiles()
 		startDiskWriter(profile)
 
 		audioServer.ConnectPorts(true, false)
 
 		sampleRateStr := strconv.FormatFloat(float64(audioServer.GetSampleRate())/1000.0, 'f', -1, 64)
-		displayHandle.tui.SetAudioFormat(fmt.Sprintf("%dbit / %sKHz", profile.Output.BitDepth, sampleRateStr))
+		displayHandle.tui.SetAudioFormat(fmt.Sprintf("%d bit / %s KHz", profile.Output.BitDepth, sampleRateStr))
 		displayHandle.tui.SetTransportStatus(display.StatusRecording)
 		displayHandle.tui.SetProfileName(profile.Name)
 		displayHandle.tui.SetTakeName(profile.Output.Take)
@@ -166,5 +171,7 @@ func runEngine(config *model.Config, profile *model.Profile, simulationOptions *
 		transportRecord = false
 		displayHandle.tui.SetTransportStatus(display.StatusShuttingDown)
 	})
+
+	// wait for everything to finalize and shutdown
 	reaper.Wait()
 }

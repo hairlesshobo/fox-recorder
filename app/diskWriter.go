@@ -42,7 +42,6 @@ func startDiskWriter(profile *model.Profile) {
 }
 
 // func getSamplesFromBuffer(sampleCount int, writeBuffer chan float32) []float32 {
-// 	// TODO: Make sure this isn't necessary (trying to optimize each write cycle)
 // 	currentBufferLen := len(writeBuffer)
 
 // 	if currentBufferLen < sampleCount {
@@ -102,27 +101,28 @@ func writeCycle(profile *model.Profile, finish bool) bool {
 		}
 		stats.diskProcessLastStartTime = time.Now().UnixMicro()
 
-		for _, channel := range outputFiles {
-			// TODO: make sure channel is enabled
-			writeBuffers := channel.GetWriteBuffers()
+		for _, outputFile := range outputFiles {
+			if !outputFile.Enabled {
+				continue
+			}
+
+			writeBuffers := outputFile.GetWriteBuffers()
 
 			if len(writeBuffers[0]) > requiredSamples || finish {
 				if finish {
 					samplesToRead = len(writeBuffers[0])
-					slog.Debug(fmt.Sprintf("disk writer: reading remaining buffer samples: %d", samplesToRead))
+					util.TraceLog(fmt.Sprintf("disk writer: reading remaining buffer samples: %d", samplesToRead))
 				}
 
 				util.TraceLog(fmt.Sprintf("Writing %d samples to file", samplesToRead))
 
-				if !channel.FileOpen {
-					slog.Error("Cannot write to closed file, " + channel.FileName)
+				if !outputFile.FileOpen {
+					slog.Error("Cannot write to closed file, " + outputFile.FileName)
 					reaper.Reap()
 					return false
 				}
 
 				for _, writeBuffer := range writeBuffers {
-					// TODO: do i want to limit this to the requiredSampels count or just drain what it has left?
-
 					//
 					// previous version
 					//
@@ -139,7 +139,6 @@ func writeCycle(profile *model.Profile, finish bool) bool {
 
 					// iBuf := fBuf.AsIntBuffer()
 
-					// // TODO: add interleave support
 					// channel.Write(iBuf)
 
 					//
@@ -148,8 +147,8 @@ func writeCycle(profile *model.Profile, finish bool) bool {
 					buf := &audio.IntBuffer{
 						Data: make([]int, samplesToRead),
 						Format: &audio.Format{
-							NumChannels: int(channel.ChannelCount),
-							SampleRate:  int(channel.SampleRate),
+							NumChannels: int(outputFile.ChannelCount),
+							SampleRate:  int(outputFile.SampleRate),
 						},
 					}
 
@@ -162,11 +161,11 @@ func writeCycle(profile *model.Profile, finish bool) bool {
 					}
 
 					// TODO: add interleave support
-					channel.Write(buf)
+					outputFile.Write(buf)
 				}
 
 				if finish {
-					channel.Close()
+					outputFile.Close()
 				}
 			}
 		}

@@ -32,8 +32,10 @@ import (
 )
 
 type OutputFile struct {
+	ChannelName  string
 	FilePath     string
 	FileName     string
+	Enabled      bool
 	InputPorts   []*Port
 	FileHandle   *os.File
 	Encoder      *wav.Encoder

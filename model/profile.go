@@ -39,7 +39,7 @@ type ProfileAudioServer struct {
 type ProfileChannel struct {
 	Ports       []int  `yaml:"ports"`
 	ChannelName string `yaml:"channel_name"`
-	Enabled     bool   `yaml:"enabled"`
+	Disabled    bool   `yaml:"disabled"`
 }
 
 type ProfileOutput struct {

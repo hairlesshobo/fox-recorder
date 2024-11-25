@@ -140,16 +140,6 @@ func (server *JackServer) StartServer() {
 	<-ready
 }
 
-func (server *JackServer) StopServer() {
-	if server != nil {
-		server.Disconnect()
-
-		// TODO: make sure process is running? add boolean to server struct and set/clear it in StartServer() w/ mutex
-		server.cmd.Process.Kill()
-		server.cmd.Wait()
-	}
-}
-
 func (server *JackServer) Connect() {
 	reaper.Register("jack client")
 
@@ -167,109 +157,7 @@ func (server *JackServer) Connect() {
 
 	slog.Info("JACK server connected")
 
-	server.getPorts()
-}
-
-func (server *JackServer) GetFramesPerPeriod() int {
-	return int(server.jackClient.GetBufferSize())
-}
-
-func (server *JackServer) GetSampleRate() int {
-	return int(server.jackClient.GetSampleRate())
-}
-
-func (server *JackServer) getPorts() {
-	// get input ports
-	inputPorts := server.jackClient.GetPorts(server.config.HardwarePortConnectionPrefix+":out*", "", jack.PortIsOutput) // | jack.PortIsPhysical)
-	for i, port := range inputPorts {
-		server.ports = append(server.ports, newPort(In, fmt.Sprintf("in_%d", i+1), port))
-	}
-
-	// get output ports
-	// outputPorts := server.jackClient.GetPorts("", "", jack.PortIsInput|jack.PortIsPhysical)
-	// for i, port := range outputPorts {
-	// 	// server.ports = append(server.ports, newPort(Out, fmt.Sprintf("out_%d", outputNum), fmt.Sprintf("system:playback_%d", outputNum)))
-	// 	server.ports = append(server.ports, newPort(In, fmt.Sprintf("out_%d", i+1), port))
-	// }
-}
-
-func (server *JackServer) Disconnect() {
-	server.shutdownMutex.Lock()
-
-	if server.clientConnected {
-		// disconnect all ports
-		server.DisconnectAllPorts()
-
-		// deactivate
-		// server.DeactivateClient()
-
-		slog.Info("Allowing jack to finish processing")
-		time.Sleep(1 * time.Second)
-
-		slog.Info("Disconnecting JACK client")
-
-		jackStatus := server.jackClient.Close()
-
-		if jackStatus != 0 {
-			slog.Error(fmt.Sprintf("JACK Status: %s", jack.StrError(jackStatus)))
-			return
-		}
-
-		server.clientConnected = false
-		slog.Info("JACK client disconnected")
-		reaper.Done("jack client")
-	} else {
-		slog.Warn("JACK client already disconnected")
-	}
-
-	server.shutdownMutex.Unlock()
-}
-
-func (server *JackServer) DisconnectAllPorts() {
-	slog.Info("Disconnecting all audio ports")
-
-	for _, port := range server.GetAllPorts() {
-		if !port.connected {
-			continue
-		}
-
-		var inName string
-		var outName string
-
-		if port.portDirection == In {
-			inName = port.jackName
-			outName = fmt.Sprintf("%s:%s", server.config.JackClientName, port.myName)
-		} else if port.portDirection == Out {
-			inName = fmt.Sprintf("%s:%s", server.config.JackClientName, port.myName)
-			outName = port.jackName
-		}
-
-		slog.Debug(fmt.Sprintf("Disconnected port %s from port %s", inName, outName))
-		server.jackClient.Disconnect(inName, outName)
-		port.connected = false
-	}
-}
-
-func (server *JackServer) GetAllPorts() []*Port {
-	return server.ports
-}
-
-func (server *JackServer) findJackPort(name string, portDirection PortDirection) *Port {
-	for _, port := range server.ports {
-		if port.portDirection != portDirection {
-			continue
-		}
-
-		if strings.HasSuffix(port.jackName, name) {
-			return port
-		}
-	}
-
-	return nil
-}
-
-func (server *JackServer) GetOutputFiles() []*OutputFile {
-	return server.outputFiles
+	server.populatePorts()
 }
 
 func (server *JackServer) PrepareOutputFiles() {
@@ -282,7 +170,9 @@ func (server *JackServer) PrepareOutputFiles() {
 
 		fileName := fmt.Sprintf("%s_channel%s_%s.wav", server.profile.Output.Take, strings.Join(portNumbers, "-"), channel.ChannelName)
 
-		outputFile := OutputFile{
+		outputFile := &OutputFile{
+			ChannelName:  channel.ChannelName,
+			Enabled:      !channel.Disabled,
 			FileName:     fileName,
 			FilePath:     path.Join(server.profile.Output.Directory, fileName),
 			InputPorts:   make([]*Port, len(channel.Ports)),
@@ -292,55 +182,47 @@ func (server *JackServer) PrepareOutputFiles() {
 			FileOpen:     false,
 		}
 
-		slog.Info("Creating output file " + outputFile.FilePath)
+		// if the channel isn't enabled, we skip creating output files or buffers
+		if !channel.Disabled {
+			slog.Info("Creating output file " + outputFile.FilePath)
 
-		var err error
-		outputFile.FileHandle, err = os.Create(outputFile.FilePath)
-		if err != nil {
-			slog.Error("error creating %s: %s", outputFile.FilePath, err)
-		}
+			var err error
+			outputFile.FileHandle, err = os.Create(outputFile.FilePath)
+			if err != nil {
+				slog.Error("error creating %s: %s", outputFile.FilePath, err)
+			}
 
-		outputFile.Encoder = wav.NewEncoder(outputFile.FileHandle, outputFile.SampleRate, outputFile.BitDepth, len(channel.Ports), 1)
+			outputFile.Encoder = wav.NewEncoder(outputFile.FileHandle, outputFile.SampleRate, outputFile.BitDepth, len(channel.Ports), 1)
 
-		for channelNum, channelPort := range channel.Ports {
-			jackPort := server.findJackPort(fmt.Sprintf("%d", channelPort), In)
+			for channelNum, channelPort := range channel.Ports {
+				jackPort := server.findJackPort(fmt.Sprintf("%d", channelPort), In)
 
-			if jackPort != nil {
-				outputFile.InputPorts[channelNum] = jackPort
+				if jackPort != nil {
+					// this should make sure a port can only be assigned once
+					if jackPort.outputFile != nil && jackPort.outputFile != outputFile {
+						slog.Error(fmt.Sprintf("Error assigning output port to file '%s' because input port %d is already assigned to '%s'", channel.ChannelName, channelPort, jackPort.outputFile.ChannelName))
+						reaper.Reap()
+						return
+					}
 
-				success := jackPort.AllocateBuffer(int(float64(server.profile.AudioServer.SampleRate) * server.profile.Output.BufferSizeSeconds))
+					jackPort.outputFile = outputFile
+					outputFile.InputPorts[channelNum] = jackPort
 
-				// TODO: make sure a port can only be assigned once - add channel to port and compare that its not a different channel
-				if !success {
-					slog.Error("Failed to allocate buffer for port " + jackPort.jackName)
+					success := jackPort.AllocateBuffer(int(float64(server.profile.AudioServer.SampleRate) * server.profile.Output.BufferSizeSeconds))
+
+					if !success {
+						slog.Error("Failed to allocate buffer for port " + jackPort.jackName)
+						reaper.Reap()
+						return
+					}
 				}
 			}
+
+			outputFile.FileOpen = true
 		}
 
-		outputFile.FileOpen = true
-
-		server.outputFiles = append(server.outputFiles, &outputFile)
+		server.outputFiles = append(server.outputFiles, outputFile)
 	}
-}
-
-func (server *JackServer) GetPorts(direction PortDirection) []*Port {
-	ports := make([]*Port, 0)
-
-	for _, port := range server.GetAllPorts() {
-		if port.portDirection == direction {
-			ports = append(ports, port)
-		}
-	}
-
-	return ports
-}
-
-func (server *JackServer) GetInputPorts() []*Port {
-	return server.GetPorts(In)
-}
-
-func (server *JackServer) GetOutputPorts() []*Port {
-	return server.GetPorts(Out)
 }
 
 func (server *JackServer) RegisterPorts(registerInput bool, registerOutput bool) {
@@ -371,35 +253,6 @@ func (server *JackServer) RegisterPorts(registerInput bool, registerOutput bool)
 	}
 }
 
-func (server *JackServer) SetProcessCallback(callback func(nframes uint32) int) {
-	if code := server.jackClient.SetProcessCallback(callback); code != 0 {
-		slog.Error(fmt.Sprintf("Failed to set process callback: %s", jack.StrError(code)))
-		return
-	}
-}
-
-func (server *JackServer) SetErrorCallback(callback func(string)) {
-	jack.SetErrorFunction(callback)
-}
-
-func (server *JackServer) SetInfoCallback(callback func(string)) {
-	jack.SetInfoFunction(callback)
-}
-
-func (server *JackServer) SetShutdownCallback(callback func()) {
-	server.jackClient.OnShutdown(callback)
-}
-
-func (server *JackServer) SetXrunCallback(callback func() int) {
-	server.jackClient.SetXRunCallback(callback)
-}
-
-func (server *JackServer) CloseOutputFiles() {
-	for _, outputFile := range server.outputFiles {
-		outputFile.Close()
-	}
-}
-
 func (server *JackServer) ActivateClient() {
 	slog.Info("Activating jack client")
 
@@ -409,16 +262,6 @@ func (server *JackServer) ActivateClient() {
 		return
 	}
 }
-
-// func (server *JackServer) DeactivateClient() {
-// 	slog.Info("Deactivating jack client")
-
-// 	// deactivate client
-// 	if code := server.jackClient.Deactivate(); code != 0 {
-// 		slog.Error(fmt.Sprintf("Failed to deactivate client: %s", jack.StrError(code)))
-// 		return
-// 	}
-// }
 
 func (server *JackServer) ConnectPorts(connectInput bool, connectOutput bool) {
 	slog.Info("Connecting audio ports")
@@ -449,4 +292,188 @@ func (server *JackServer) ConnectPorts(connectInput bool, connectOutput bool) {
 	}
 
 	slog.Info("Audio ports connected")
+}
+
+func (server *JackServer) CloseOutputFiles() {
+	for _, outputFile := range server.outputFiles {
+		outputFile.Close()
+	}
+}
+
+// func (server *JackServer) DeactivateClient() {
+// 	slog.Info("Deactivating jack client")
+
+// 	// deactivate client
+// 	if code := server.jackClient.Deactivate(); code != 0 {
+// 		slog.Error(fmt.Sprintf("Failed to deactivate client: %s", jack.StrError(code)))
+// 		return
+// 	}
+// }
+
+func (server *JackServer) DisconnectAllPorts() {
+	slog.Info("Disconnecting all audio ports")
+
+	for _, port := range server.GetAllPorts() {
+		if !port.connected {
+			continue
+		}
+
+		var inName string
+		var outName string
+
+		if port.portDirection == In {
+			inName = port.jackName
+			outName = fmt.Sprintf("%s:%s", server.config.JackClientName, port.myName)
+		} else if port.portDirection == Out {
+			inName = fmt.Sprintf("%s:%s", server.config.JackClientName, port.myName)
+			outName = port.jackName
+		}
+
+		slog.Debug(fmt.Sprintf("Disconnected port %s from port %s", inName, outName))
+		server.jackClient.Disconnect(inName, outName)
+		port.connected = false
+	}
+}
+
+func (server *JackServer) Disconnect() {
+	server.shutdownMutex.Lock()
+
+	if server.clientConnected {
+		// disconnect all ports
+		server.DisconnectAllPorts()
+
+		// important: this seems to break everything.. shrug.
+		// deactivate
+		// server.DeactivateClient()
+
+		slog.Info("Allowing jack to finish processing")
+		time.Sleep(1 * time.Second)
+
+		slog.Info("Disconnecting JACK client")
+
+		jackStatus := server.jackClient.Close()
+
+		if jackStatus != 0 {
+			slog.Error(fmt.Sprintf("JACK Status: %s", jack.StrError(jackStatus)))
+			return
+		}
+
+		server.clientConnected = false
+		slog.Info("JACK client disconnected")
+		reaper.Done("jack client")
+	} else {
+		slog.Warn("JACK client already disconnected")
+	}
+
+	server.shutdownMutex.Unlock()
+}
+
+func (server *JackServer) StopServer() {
+	if server != nil {
+		server.Disconnect()
+
+		// TODO: make sure process is running? add boolean to server struct and set/clear it in StartServer() w/ mutex
+		server.cmd.Process.Kill()
+		server.cmd.Wait()
+	}
+}
+
+//
+// getter functions
+//
+
+func (server *JackServer) GetFramesPerPeriod() int {
+	return int(server.jackClient.GetBufferSize())
+}
+
+func (server *JackServer) GetSampleRate() int {
+	return int(server.jackClient.GetSampleRate())
+}
+
+func (server *JackServer) GetAllPorts() []*Port {
+	return server.ports
+}
+
+func (server *JackServer) GetOutputFiles() []*OutputFile {
+	return server.outputFiles
+}
+
+func (server *JackServer) GetPorts(direction PortDirection) []*Port {
+	ports := make([]*Port, 0)
+
+	for _, port := range server.GetAllPorts() {
+		if port.portDirection == direction {
+			ports = append(ports, port)
+		}
+	}
+
+	return ports
+}
+
+func (server *JackServer) GetInputPorts() []*Port {
+	return server.GetPorts(In)
+}
+
+func (server *JackServer) GetOutputPorts() []*Port {
+	return server.GetPorts(Out)
+}
+
+//
+// callback registration
+//
+
+func (server *JackServer) SetProcessCallback(callback func(nframes uint32) int) {
+	if code := server.jackClient.SetProcessCallback(callback); code != 0 {
+		slog.Error(fmt.Sprintf("Failed to set process callback: %s", jack.StrError(code)))
+		return
+	}
+}
+
+func (server *JackServer) SetErrorCallback(callback func(string)) {
+	jack.SetErrorFunction(callback)
+}
+
+func (server *JackServer) SetInfoCallback(callback func(string)) {
+	jack.SetInfoFunction(callback)
+}
+
+func (server *JackServer) SetShutdownCallback(callback func()) {
+	server.jackClient.OnShutdown(callback)
+}
+
+func (server *JackServer) SetXrunCallback(callback func() int) {
+	server.jackClient.SetXRunCallback(callback)
+}
+
+//
+// private functions
+//
+
+func (server *JackServer) findJackPort(name string, portDirection PortDirection) *Port {
+	for _, port := range server.ports {
+		if port.portDirection != portDirection {
+			continue
+		}
+
+		if strings.HasSuffix(port.jackName, name) {
+			return port
+		}
+	}
+
+	return nil
+}
+
+func (server *JackServer) populatePorts() {
+	// get input ports
+	inputPorts := server.jackClient.GetPorts(server.config.HardwarePortConnectionPrefix+":out*", "", jack.PortIsOutput) // | jack.PortIsPhysical)
+	for i, port := range inputPorts {
+		server.ports = append(server.ports, newPort(In, fmt.Sprintf("in_%d", i+1), port))
+	}
+
+	// get output ports
+	// outputPorts := server.jackClient.GetPorts("", "", jack.PortIsInput|jack.PortIsPhysical)
+	// for i, port := range outputPorts {
+	// 	// server.ports = append(server.ports, newPort(Out, fmt.Sprintf("out_%d", outputNum), fmt.Sprintf("system:playback_%d", outputNum)))
+	// 	server.ports = append(server.ports, newPort(In, fmt.Sprintf("out_%d", i+1), port))
+	// }
 }

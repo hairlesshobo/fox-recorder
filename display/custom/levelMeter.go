@@ -30,6 +30,8 @@ import (
 	"sync"
 	"time"
 
+	"fox-audio/display/theme"
+
 	"code.rocketnine.space/tslocum/cview"
 	"github.com/gdamore/tcell/v2"
 )
@@ -87,7 +89,7 @@ func NewLevelMeter(meterSteps []int, colorMap map[int]tcell.Color) *LevelMeter {
 		peakLevel:        -150,
 		level:            -150,
 		longTermMaxLevel: -150,
-		disarmedColor:    tcell.Color237,
+		disarmedColor:    theme.LevelMeterDisarmdFillColor,
 		channelNumber:    "",
 		channelArmed:     false,
 		meterSteps:       meterSteps,

@@ -40,6 +40,7 @@ type Port struct {
 	jackName      string
 	jackPort      *jack.Port
 	buffer        chan float32
+	outputFile    *OutputFile
 }
 
 func newPort(direction PortDirection, myName string, jackName string) *Port {
@@ -75,4 +76,8 @@ func (port *Port) AllocateBuffer(size int) bool {
 
 func (port *Port) GetWriteBuffer() chan float32 {
 	return port.buffer
+}
+
+func (port *Port) IsArmed() bool {
+	return port.outputFile != nil
 }

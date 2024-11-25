@@ -386,6 +386,10 @@ func (tui *Tui) UpdateSignalLevels(levels []*model.SignalLevel) {
 	}
 }
 
+func (tui *Tui) SetChannelArmStatus(channel int, armed bool) {
+	tui.meters[channel].ArmChannel(armed)
+}
+
 func (tui *Tui) SetChannelCount(channelCount int) {
 	levelColumns := make([]int, channelCount+2)
 	levelColumns[0] = 5
@@ -416,16 +420,10 @@ func (tui *Tui) SetChannelCount(channelCount int) {
 		tui.meters[i].SetMinLevel(-150)
 		tui.meters[i].SetLevel(-99)
 		tui.meters[i].SetChannelNumber(fmt.Sprintf("%d", i+1))
-		tui.meters[i].ArmChannel(true)
-
-		// TODO: this needs to be controlled externally
-
-		// if (i >= 8 && i <= 16) || (i >= 19 && i <= 27) {
-		// 	tui.meters[i].ArmChannel(true)
-		// }
+		tui.meters[i].ArmChannel(false)
 
 		if i%2 == 1 {
-			tui.meters[i].SetBackgroundColor(theme.MeterAlternateBackground)
+			tui.meters[i].SetBackgroundColor(theme.LevelMeterAlternateBackgroundColor)
 		}
 
 		tui.metersGrid.AddItem(tui.meters[i], 0, i+1, 1, 1, 0, 0, false)
