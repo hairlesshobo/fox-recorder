@@ -27,12 +27,22 @@ import (
 )
 
 const (
-	Blue      = tcell.ColorBlue
-	Green     = tcell.Color71
-	Pink      = tcell.Color131
-	Red       = tcell.Color124
-	SoftGreen = tcell.Color72
-	Yellow    = tcell.Color142
+	Blue         = tcell.ColorBlue
+	BlueRGB      = "0000FF"
+	Green        = tcell.Color71
+	GreenRGB     = "5FAF5F"
+	Pink         = tcell.Color131
+	PinkRGB      = "AF5F5F"
+	Red          = tcell.Color124
+	RedRGB       = "AF0000"
+	SoftGreen    = tcell.Color72
+	SoftGreenRGB = "5FAF87"
+	Yellow       = tcell.Color142
+	YellowRGB    = "AFAF00"
+	Gray         = tcell.ColorGray
+	GrayRGB      = "808080"
+
+	BorderColor = tcell.Color243
 
 	LevelMeterAlternateBackgroundColor = tcell.Color233
 	LevelMeterDisarmdFillColor         = tcell.Color242
@@ -45,12 +55,22 @@ const (
 // -150: tcell.Color72,  //tcell.Color120, 59? 60? 61? 66? 67? 68? 72?
 
 const (
-	RuneStop        = rune(9209) // ⏹  -- alternate: rune(9635)
-	RuneRecord      = rune(9210) // ⏺  -- alternate: rune(9679)
-	RunePlay        = rune(9205) // ⏵  -- alternate: rune(9654)
+	RuneClock       = rune(9201) // ⏱
 	RunePause       = rune(9208) // ⏸
 	RunePausePlay   = rune(9199) // ⏯
+	RunePlay        = rune(9205) // ⏵  -- alternate: rune(9654)
+	RuneRecord      = rune(9210) // ⏺  -- alternate: rune(9679)
 	RuneSkipBack    = rune(9198) // ⏮
 	RuneSkipForward = rune(9197) // ⏭
-	RuneClock       = rune(9201) // ⏱
+	RuneStop        = rune(9209) // ⏹  -- alternate: rune(9635)
+
+	RuneFailed = rune(9932) // ⛌
+	// 10004 ✔
+	// 10008 ✘
+
+	// mono/stereo possible indicators
+	// 9900 ⚬
+	// 9901 ⚭
+	// 9902 ⚮
+	// 9903 ⚯
 )

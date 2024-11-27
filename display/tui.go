@@ -41,13 +41,18 @@ import (
 // constants
 //
 
-const (
-	StatusPaused       = 0
-	StatusPlaying      = 1
-	StatusRecording    = 2
-	StatusStarting     = 3
-	StatusShuttingDown = 4
+type Status int
 
+const (
+	StatusPaused Status = iota
+	StatusPlaying
+	StatusRecording
+	StatusStarting
+	StatusShuttingDown
+	StatusFailed
+)
+
+const (
 	meterWidth       = 4
 	samplesToAverage = 5
 )
@@ -132,11 +137,12 @@ func (tui *Tui) Initalize() {
 	tui.appGrid = cview.NewGrid()
 	tui.appGrid.SetPadding(0, 0, 0, 0)
 	tui.appGrid.SetColumns(-1, 60)
+	tui.appGrid.SetBorders(true)
+	tui.appGrid.SetBordersColor(theme.BorderColor)
 	tui.appGrid.SetRows(10, meterRowHeight, -1)
 	tui.appGrid.SetBackgroundColor(cview.Styles.PrimitiveBackgroundColor)
 
 	statusGrid := cview.NewGrid()
-	statusGrid.SetBorder(true)
 	statusGrid.SetPadding(0, 0, 1, 1)
 	statusGrid.SetColumns(51, 55, -1)
 	statusGrid.SetRows(1, 1, 1, 1, 1, 1, -1)
@@ -179,15 +185,14 @@ func (tui *Tui) Initalize() {
 	tui.appGrid.AddItem(statusGrid, 0, 0, 1, 1, 0, 0, false)
 
 	tui.metersGrid = cview.NewGrid()
-	tui.metersGrid.SetBorder(false)
-	tui.metersGrid.SetBorders(false)
 	tui.metersGrid.SetPadding(0, 0, 0, 0)
 	tui.metersGrid.SetColumns(-1)
 	tui.appGrid.AddItem(tui.metersGrid, 1, 0, 1, 1, 0, 0, false)
 
 	tui.tvLogs = cview.NewTextView()
 	tui.tvLogs.SetPadding(0, 0, 0, 0)
-	tui.appGrid.AddItem(tui.tvLogs, 2, 0, 1, 1, 0, 0, false)
+	tui.tvLogs.SetDynamicColors(true)
+	tui.appGrid.AddItem(tui.tvLogs, 2, 0, 1, 1, 0, 0, true)
 
 	tui.app.SetRoot(tui.appGrid, true)
 }
@@ -213,10 +218,10 @@ func (tui *Tui) Start() {
 }
 
 func (tui *Tui) Shutdown() {
-	slog.Info("Shutting down TUI")
+	slog.Debug("Shutting down TUI")
 	tui.app.Stop()
 
-	slog.Info("Waiting for TUI to shut down")
+	slog.Debug("Waiting for TUI to shut down")
 	tui.WaitForShutdown()
 }
 
@@ -247,7 +252,7 @@ func (tui *Tui) eventHandler(event *tcell.EventKey) *tcell.EventKey {
 func (tui *Tui) excecuteLoop() {
 	defer tui.app.HandlePanic()
 
-	slog.Info("TUI loop started")
+	slog.Debug("TUI loop started")
 
 	for {
 		if len(tui.shutdownChannel) > 0 {
@@ -282,8 +287,8 @@ func (tui *Tui) updateMeter(meter *custom.StatusMeter, value, warnPct, cautionPc
 // status update functions
 //
 
-func (tui *Tui) SetTransportStatus(status int) {
-	if status < 0 || status > 4 {
+func (tui *Tui) SetTransportStatus(status Status) {
+	if status < 0 || status > 5 {
 		panic("invalid status value provided: " + string(status))
 	}
 
@@ -311,6 +316,10 @@ func (tui *Tui) SetTransportStatus(status int) {
 		icon = theme.RuneClock
 		color = theme.Yellow
 		transportStatus = "Shutting down"
+	} else if status == StatusFailed {
+		icon = theme.RuneFailed
+		color = theme.Red
+		transportStatus = "Failed"
 	}
 
 	tui.tvTransportStatus.SetCurrentValue(string(icon) + " " + transportStatus)
@@ -409,8 +418,22 @@ func (tui *Tui) SetChannelCount(channelCount int) {
 // logging
 //
 
+func (tui *Tui) WriteLevelLog(level slog.Level, message string) {
+	color := "-"
+
+	if level == slog.LevelWarn {
+		color = "#" + theme.YellowRGB // "yellow"
+	} else if level == slog.LevelError {
+		color = "#" + theme.RedRGB + "::b"
+	} else if level == slog.LevelDebug {
+		color = "#" + theme.GrayRGB
+	}
+
+	tui.tvLogs.Write([]byte(fmt.Sprintf("[%s][%s[] [%s[] %s[-:-:-]\n", color, time.Now().Format("2006-01-02 15:04:05"), level.String(), message)))
+}
+
 func (tui *Tui) WriteLog(message string) {
-	tui.tvLogs.Write([]byte(fmt.Sprintf("[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), message)))
+	tui.tvLogs.Write([]byte(fmt.Sprintf("[%s[] %s\n", time.Now().Format("2006-01-02 15:04:05"), message)))
 }
 
 //

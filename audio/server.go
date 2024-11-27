@@ -24,6 +24,7 @@ package audio
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -35,6 +36,7 @@ import (
 
 	"fox-audio/model"
 	"fox-audio/reaper"
+	"fox-audio/util"
 
 	"github.com/go-audio/wav"
 	"github.com/hairlesshobo/go-jack"
@@ -57,6 +59,7 @@ type JackServer struct {
 
 	clientConnected bool
 	shutdownMutex   sync.Mutex
+	serverExited    bool
 
 	cmd *exec.Cmd
 }
@@ -78,6 +81,7 @@ func NewServer(config *model.Config, profile *model.Profile) *JackServer {
 
 		clientConnected: false,
 		shutdownMutex:   sync.Mutex{},
+		serverExited:    false,
 
 		ports: make([]*Port, 0),
 	}
@@ -85,59 +89,104 @@ func NewServer(config *model.Config, profile *model.Profile) *JackServer {
 	return &server
 }
 
-func (server *JackServer) StartServer() {
-	ready := make(chan bool)
+func (server *JackServer) StartServer() error {
+	readyChan := make(chan bool)
+	// errorChan := make(chan bool)
+
+	slog.Info("Starting JACK server...")
+	// TODO: allow to specify jack binary in config
+	// TODO: dynamically find jackd binary
+	server.cmd = exec.Command("/usr/local/bin/jackd")
+
+	// TODO: add this to config
+	// server.cmd.Args = append(server.cmd.Args, "-v")
+	server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-d%s", server.driver))
+
+	if server.device != "" {
+		server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-d%s", server.device))
+	}
+
+	server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-r%d", server.sampleRate))
+	server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-p%d", server.framesPerPeriod))
+
+	jackdStdout, err := server.cmd.StdoutPipe()
+	if err != nil {
+		slog.Error("Error occurred connecting stdout for 'jackd' command: " + err.Error())
+		return err
+	}
+
+	jackdStderr, err := server.cmd.StderrPipe()
+	if err != nil {
+		slog.Error("Error occurred connecting stdout for 'jackd' command: " + err.Error())
+		return err
+	}
+
+	reaper.Register("jack server")
 
 	go func() {
-		reaper.Register("jack server")
-
-		slog.Info("Starting JACK server...")
-		// TODO: allow to specify jack binary in config
-		// TODO: dynamically find jackd binary
-		server.cmd = exec.Command("/usr/local/bin/jackd")
-
-		// TODO: add this to config
-		// server.cmd.Args = append(server.cmd.Args, "-v")
-		server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-d%s", server.driver))
-
-		if server.device != "" {
-			server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-d%s", server.device))
-		}
-
-		server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-r%d", server.sampleRate))
-		server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-p%d", server.framesPerPeriod))
-
-		stdout, err := server.cmd.StdoutPipe()
-
-		// TODO: handle jack startup failure!!
-		// TODO: handle jack stderr
-
+		err = server.cmd.Run()
 		if err != nil {
-			slog.Error("Error occurred running 'jackd' command: " + err.Error())
-			return
-		}
-
-		if err = server.cmd.Start(); err != nil {
 			slog.Error("Error occurred starting 'jackd' command: " + err.Error())
-			return
-		}
-
-		scanner := bufio.NewScanner(stdout)
-		for scanner.Scan() {
-			// not using reaper.Reaped() here because this should end on its own once the jack server is killed
-			line := scanner.Text()
-
-			slog.Debug("jackd: " + line)
-
-			if strings.Contains(line, "driver is running...") {
-				ready <- true
-			}
 		}
 
 		reaper.Done("jack server")
 	}()
 
-	<-ready
+	// stdout processor
+	go func() {
+		scanner := bufio.NewScanner(jackdStdout)
+		for scanner.Scan() {
+			// not using reaper.Reaped() here because this should end on its own once the jack server is killed
+			line := scanner.Text()
+
+			// to reduce startup noise, we log	 some known output lines as trace
+			if strings.HasPrefix(line, "Copyright") ||
+				strings.HasPrefix(line, "jackdmp comes with") ||
+				strings.HasPrefix(line, "This is free") ||
+				strings.HasPrefix(line, "under certain conditions") ||
+				strings.HasPrefix(line, "JACK server starting in") ||
+				strings.HasPrefix(line, "self-connect-mode is") {
+				util.TraceLog("jackd: " + line)
+			} else {
+				slog.Info("jackd: " + line)
+			}
+
+			if strings.Contains(line, "driver is running...") {
+				readyChan <- true
+			}
+		}
+	}()
+
+	// stderr processor
+	go func() {
+		scanner := bufio.NewScanner(jackdStderr)
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			if strings.HasPrefix(line, "Default input and output devices are not the same") {
+				util.TraceLog("jackd: " + line)
+			} else {
+				slog.Error("jackd: " + line)
+			}
+		}
+	}()
+
+	// TODO: handle jack startup failure!!
+	for {
+		select {
+		case <-readyChan:
+			// we made it, so we can return and move on with startup
+			return nil
+		default:
+			procState := server.cmd.ProcessState
+
+			if procState != nil && procState.Exited() && procState.ExitCode() != 0 {
+				return errors.New("jackd failed to start")
+			} else {
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+	}
 }
 
 func (server *JackServer) Connect() {

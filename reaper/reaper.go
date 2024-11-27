@@ -59,7 +59,7 @@ func Reap() {
 		slices.Reverse(callbacksReversed)
 
 		for _, callback := range callbacksReversed {
-			slog.Info("reaper: calling reap callback for '" + callback.name + "'")
+			slog.Debug("reaper: calling reap callback for '" + callback.name + "'")
 			callback.callbackFunc()
 		}
 	}

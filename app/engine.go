@@ -94,7 +94,8 @@ func runEngine(config *model.Config, profile *model.Profile, simulationOptions *
 	statsShutdownChan := initStatistics(profile)
 	reaper.Callback("stats", func() { statsShutdownChan <- true })
 
-	reaper.Callback("wait", func() { time.Sleep(3 * time.Second) })
+	// TODO: wait for user confirmation on error
+	reaper.Callback("wait", func() { time.Sleep(6 * time.Second) })
 
 	// ConfigureTextLogger()
 	ConfigureTuiLogger()
@@ -110,55 +111,68 @@ func runEngine(config *model.Config, profile *model.Profile, simulationOptions *
 			reaper.Reap()
 		})
 
+		jackRunning := true
+
 		if profile.AudioServer.AutoStart {
-			audioServer.StartServer()
-			reaper.Callback("stop jack server", audioServer.StopServer)
+			err := audioServer.StartServer()
+			if err != nil {
+				slog.Error(err.Error())
+				displayHandle.tui.SetTransportStatus(display.StatusFailed)
+				jackRunning = false
+				reaper.Reap()
+			} else {
+				reaper.Callback("stop jack server", audioServer.StopServer)
+			}
+		} else {
+			// TODO: make sure jackd is running prior to startup
 		}
 
-		displayHandle.tui.SetTransportStatus(display.StatusPaused)
+		if jackRunning {
+			displayHandle.tui.SetTransportStatus(display.StatusPaused)
 
-		audioServer.Connect()
-		reaper.Callback("disconnect jack server", audioServer.Disconnect)
+			audioServer.Connect()
+			reaper.Callback("disconnect jack server", audioServer.Disconnect)
 
-		// set cycle buffer size .. this needs to be proportional to the disk
-		// buffer so that the buffer has time to fill before the jack processor
-		// deadlocks waiting for data to be processed
-		cycleBufferSize := int(math.Ceil(float64(audioServer.GetSampleRate())*float64(int(profile.Output.BufferSizeSeconds))) / float64(audioServer.GetFramesPerPeriod()))
-		cycleDoneChannel = make(chan bool, cycleBufferSize*5)
+			// set cycle buffer size .. this needs to be proportional to the disk
+			// buffer so that the buffer has time to fill before the jack processor
+			// deadlocks waiting for data to be processed
+			cycleBufferSize := int(math.Ceil(float64(audioServer.GetSampleRate())*float64(int(profile.Output.BufferSizeSeconds))) / float64(audioServer.GetFramesPerPeriod()))
+			cycleDoneChannel = make(chan bool, cycleBufferSize*5)
 
-		// only register input ports, for now
-		audioServer.RegisterPorts(true, false)
+			// only register input ports, for now
+			audioServer.RegisterPorts(true, false)
 
-		audioServer.PrepareOutputFiles()
+			audioServer.PrepareOutputFiles()
 
-		ports = audioServer.GetInputPorts()
-		displayHandle.tui.SetChannelCount(len(ports))
-		signalLevels = make([]*model.SignalLevel, len(ports))
+			ports = audioServer.GetInputPorts()
+			displayHandle.tui.SetChannelCount(len(ports))
+			signalLevels = make([]*model.SignalLevel, len(ports))
 
-		for i, port := range ports {
-			displayHandle.tui.SetChannelArmStatus(i, port.IsArmed())
+			for i, port := range ports {
+				displayHandle.tui.SetChannelArmStatus(i, port.IsArmed())
+			}
+
+			// set callbacks
+			audioServer.SetProcessCallback(jackProcess)
+			audioServer.SetXrunCallback(jackXrun)
+			audioServer.SetShutdownCallback(jackShutdown)
+
+			audioServer.ActivateClient()
+
+			outputFiles = audioServer.GetOutputFiles()
+			startDiskWriter(profile)
+
+			audioServer.ConnectPorts(true, false)
+
+			sampleRateStr := strconv.FormatFloat(float64(audioServer.GetSampleRate())/1000.0, 'f', -1, 64)
+			displayHandle.tui.SetAudioFormat(fmt.Sprintf("%d bit / %s KHz", profile.Output.BitDepth, sampleRateStr))
+			displayHandle.tui.SetTransportStatus(display.StatusRecording)
+			displayHandle.tui.SetProfileName(profile.Name)
+			displayHandle.tui.SetTakeName(profile.Output.Take)
+			displayHandle.tui.SetDirectory(profile.Output.Directory)
+
+			transportRecord = true
 		}
-
-		// set callbacks
-		audioServer.SetProcessCallback(jackProcess)
-		audioServer.SetXrunCallback(jackXrun)
-		audioServer.SetShutdownCallback(jackShutdown)
-
-		audioServer.ActivateClient()
-
-		outputFiles = audioServer.GetOutputFiles()
-		startDiskWriter(profile)
-
-		audioServer.ConnectPorts(true, false)
-
-		sampleRateStr := strconv.FormatFloat(float64(audioServer.GetSampleRate())/1000.0, 'f', -1, 64)
-		displayHandle.tui.SetAudioFormat(fmt.Sprintf("%d bit / %s KHz", profile.Output.BitDepth, sampleRateStr))
-		displayHandle.tui.SetTransportStatus(display.StatusRecording)
-		displayHandle.tui.SetProfileName(profile.Name)
-		displayHandle.tui.SetTakeName(profile.Output.Take)
-		displayHandle.tui.SetDirectory(profile.Output.Directory)
-
-		transportRecord = true
 	}
 
 	// this blocks until the jack connection shuts down
@@ -167,11 +181,13 @@ func runEngine(config *model.Config, profile *model.Profile, simulationOptions *
 		startSimulation(simulationOptions)
 	}
 
-	reaper.Callback("shutdown status", func() {
-		transportRecord = false
-		displayHandle.tui.SetTransportStatus(display.StatusShuttingDown)
-	})
+	reaper.Callback("shutdown status", doShutdown)
 
 	// wait for everything to finalize and shutdown
 	reaper.Wait()
+}
+
+func doShutdown() {
+	transportRecord = false
+	displayHandle.tui.SetTransportStatus(display.StatusShuttingDown)
 }

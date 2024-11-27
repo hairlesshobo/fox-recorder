@@ -44,7 +44,9 @@ var (
 		Short: "Start a recording session",
 
 		Run: func(cmd *cobra.Command, args []string) {
-			// config := cmd.Context().Value(model.ImportConfigContext).(model.ImporterConfig)
+			// util.DumpRunes(10500, 200)
+			// return
+
 			if argProfileName == "" {
 				slog.Error("Profile not specified but is REQUIRED. See fox --help for more info")
 				os.Exit(1)
@@ -56,7 +58,7 @@ var (
 			config := &model.Config{
 				JackClientName:               "fox",
 				ProfileDirectory:             "",
-				LogLevel:                     int(slog.LevelDebug),
+				LogLevel:                     int(slog.LevelInfo),
 				HardwarePortConnectionPrefix: "system:capture_", //"multiplier:out",
 			}
 

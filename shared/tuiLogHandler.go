@@ -24,7 +24,6 @@ package shared
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"fox-audio/display"
@@ -47,7 +46,7 @@ func NewTuiLogHandler(out *display.Tui, level slog.Level, errorCallback func(str
 }
 
 func (h *TuiLogHandler) Handle(ctx context.Context, r slog.Record) error {
-	h.tui.WriteLog(fmt.Sprintf("[%s] %s	", r.Level.String(), r.Message))
+	h.tui.WriteLevelLog(r.Level, r.Message)
 
 	if r.Level == slog.LevelError {
 		h.errorCallback(r.Message)

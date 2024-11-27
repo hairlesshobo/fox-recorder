@@ -80,9 +80,9 @@ type LevelMeter struct {
 func NewLevelMeter(meterSteps []int, colorMap map[int]tcell.Color) *LevelMeter {
 	p := &LevelMeter{
 		Box:              cview.NewBox(),
-		emptyRune:        rune(9617), // tcell.RuneBlock,
+		emptyRune:        rune(9617), // ░
 		emptyColor:       cview.Styles.PrimitiveBackgroundColor,
-		filledRune:       rune(9607), //tcell.RuneBlock,
+		filledRune:       rune(9607), // ▇
 		maxLevel:         slices.Max(meterSteps),
 		minLevel:         slices.Min(meterSteps),
 		peakHoldTimeMs:   750,
