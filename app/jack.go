@@ -108,7 +108,7 @@ func jackProcess(nframes uint32) int {
 				writeBuffer := port.GetWriteBuffer()
 				if cap(writeBuffer) > 0 {
 					if (len(writeBuffer) + int(nframes)) < cap(writeBuffer) {
-						stats.samplesProcessed += uint64(nframes)
+						// stats.samplesProcessed += uint64(nframes)
 
 						for _, sample := range samplesIn {
 							writeBuffer <- float32(sample)

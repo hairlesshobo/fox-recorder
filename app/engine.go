@@ -28,6 +28,7 @@ import (
 	"math"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"fox-audio/audio"
@@ -143,6 +144,21 @@ func runEngine(config *model.Config, profile *model.Profile, simulationOptions *
 			audioServer.RegisterPorts(true, false)
 
 			audioServer.PrepareOutputFiles()
+			outputFiles = audioServer.GetOutputFiles()
+			uiOutputFiles := make([]model.UiOutputFile, len(outputFiles))
+			for ofIndex, outputFile := range outputFiles {
+				ports := make([]string, len(outputFile.InputPorts))
+				for pIndex, port := range outputFile.InputPorts {
+					ports[pIndex] = strings.Split(port.GetJackPort().GetName(), "_")[1]
+				}
+
+				uiOutputFiles[ofIndex] = model.UiOutputFile{
+					Ports: ports,
+					Name:  outputFile.ChannelName,
+					Size:  0,
+				}
+			}
+			displayHandle.tui.SetOutputFiles(uiOutputFiles)
 
 			ports = audioServer.GetInputPorts()
 			displayHandle.tui.SetChannelCount(len(ports))
@@ -159,7 +175,6 @@ func runEngine(config *model.Config, profile *model.Profile, simulationOptions *
 
 			audioServer.ActivateClient()
 
-			outputFiles = audioServer.GetOutputFiles()
 			startDiskWriter(profile)
 
 			audioServer.ConnectPorts(true, false)

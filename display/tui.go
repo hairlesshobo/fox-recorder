@@ -53,8 +53,16 @@ const (
 )
 
 const (
-	meterWidth       = 4
-	samplesToAverage = 5
+	layoutMeterWidth            = 4
+	layoutStatusItemHeaderWidth = 18
+	layoutStatusColumnIndex     = 0
+	layoutMeterColumnIndex      = 1
+	layoutStatusGridLeftWidth   = 51
+	layoutStatusGridRightWidth  = 55
+
+	layoutOutputFileColumnWidth = 45
+	layoutOutputFilePortsWidth  = 8
+	layoutOutputFileSizeWidth   = 11
 )
 
 //
@@ -90,9 +98,11 @@ type Tui struct {
 	// armedChannelCount     int
 	// connectedChannelCount int
 
-	appGrid    *cview.Grid
-	meters     []*custom.LevelMeter
-	metersGrid *cview.Grid
+	gridApp            *cview.Grid
+	gridLevelMeters    *cview.Grid
+	gridOutputFiles    *cview.Grid
+	elementLevelMeters []*custom.LevelMeter
+	elementOutputFiles []*custom.OutputFileField
 
 	tvLogs            *cview.TextView
 	tvTransportStatus *custom.StatusText
@@ -104,11 +114,11 @@ type Tui struct {
 	tvTakeName        *custom.StatusText
 	tvDirectory       *custom.StatusText
 
-	meterDiskSpace   *custom.StatusMeter
-	meterBuffer      *custom.StatusMeter
-	meterAudioLoad   *custom.StatusMeter
-	meterCycleBuffer *custom.StatusMeter
-	meterDiskLoad    *custom.StatusMeter
+	statusMeterDiskUsed        *custom.StatusMeter
+	statusMeterBufferUsed      *custom.StatusMeter
+	statusMeterCycleBufferUsed *custom.StatusMeter
+	statusMeterAudioLoad       *custom.StatusMeter
+	statusMeterDiskLoad        *custom.StatusMeter
 }
 
 //
@@ -117,8 +127,10 @@ type Tui struct {
 
 func NewTui() *Tui {
 	tui := &Tui{
-		shutdownChannel: make(chan bool, 1),
-		errorCount:      0,
+		shutdownChannel:    make(chan bool, 1),
+		errorCount:         0,
+		elementLevelMeters: make([]*custom.LevelMeter, 0),
+		elementOutputFiles: make([]*custom.OutputFileField, 0),
 	}
 
 	return tui
@@ -134,67 +146,92 @@ func (tui *Tui) Initalize() {
 
 	meterRowHeight := len(meterSteps) + 2
 
-	tui.appGrid = cview.NewGrid()
-	tui.appGrid.SetPadding(0, 0, 0, 0)
-	tui.appGrid.SetColumns(-1, 60)
-	tui.appGrid.SetBorders(true)
-	tui.appGrid.SetBordersColor(theme.BorderColor)
-	tui.appGrid.SetRows(10, meterRowHeight, -1)
-	tui.appGrid.SetBackgroundColor(cview.Styles.PrimitiveBackgroundColor)
+	statusRowCount := 10
+	statusRows := make([]int, statusRowCount)
+	for i := range statusRowCount {
+		statusRows[i] = 1
+	}
 
-	statusGrid := cview.NewGrid()
-	statusGrid.SetPadding(0, 0, 1, 1)
-	statusGrid.SetColumns(51, 55, -1)
-	statusGrid.SetRows(1, 1, 1, 1, 1, 1, -1)
-	statusGrid.SetBackgroundColor(cview.Styles.PrimitiveBackgroundColor)
+	//
+	// main application grid
+	tui.gridApp = cview.NewGrid()
+	tui.gridApp.SetPadding(0, 0, 0, 0)
+	tui.gridApp.SetColumns(-1, layoutOutputFileColumnWidth)
+	tui.gridApp.SetBorders(true)
+	tui.gridApp.SetBordersColor(theme.BorderColor)
+	tui.gridApp.SetRows(statusRowCount, meterRowHeight, -1)
+	tui.gridApp.SetBackgroundColor(cview.Styles.PrimitiveBackgroundColor)
 
-	headerWidth := 18
+	//
+	// grid for the output files list
+	tui.gridOutputFiles = cview.NewGrid()
+	tui.gridOutputFiles.SetPadding(0, 0, 0, 0)
+	tui.gridOutputFiles.SetColumns(-1)
+	tui.gridOutputFiles.SetRows(-1)
+	tui.gridOutputFiles.SetBackgroundColor(cview.Styles.PrimitiveBackgroundColor)
 
-	tui.tvTransportStatus = custom.NewStatusTextField(headerWidth, "Status", string(theme.RuneRecord)+" Recording")
+	tui.gridApp.AddItem(tui.gridOutputFiles, 0, 1, 3, 1, 0, 0, false)
+
+	//
+	// grid for the status meters
+	gridStatusMeters := cview.NewGrid()
+	gridStatusMeters.SetPadding(0, 0, 1, 1)
+	gridStatusMeters.SetColumns(layoutStatusGridLeftWidth, layoutStatusGridRightWidth, -1)
+	gridStatusMeters.SetRows(statusRows...)
+	gridStatusMeters.SetBackgroundColor(cview.Styles.PrimitiveBackgroundColor)
+
+	// text status fields
+	tui.tvTransportStatus = custom.NewStatusTextField(layoutStatusItemHeaderWidth, "Status", string(theme.RuneRecord)+" Recording")
 	tui.tvTransportStatus.SetColor(theme.Red)
-	tui.tvPosition = custom.NewStatusTextField(headerWidth, "Position", "00:00:00.000")
-	tui.tvFormat = custom.NewStatusTextField(headerWidth, "Format", "Unknown")
-	tui.tvFileSize = custom.NewStatusTextField(headerWidth, "Session Size", "0 bytes")
-	tui.tvErrorCount = custom.NewStatusTextField(headerWidth, "Errors", "0")
-	tui.tvProfileName = custom.NewStatusTextField(headerWidth, "Profile", "")
-	tui.tvTakeName = custom.NewStatusTextField(headerWidth, "Take", "")
-	tui.tvDirectory = custom.NewStatusTextField(headerWidth, "Directory", "")
+	tui.tvPosition = custom.NewStatusTextField(layoutStatusItemHeaderWidth, "Position", "00:00:00.000")
+	tui.tvFormat = custom.NewStatusTextField(layoutStatusItemHeaderWidth, "Format", "Unknown")
+	tui.tvFileSize = custom.NewStatusTextField(layoutStatusItemHeaderWidth, "Session Size", "0 bytes")
+	tui.tvErrorCount = custom.NewStatusTextField(layoutStatusItemHeaderWidth, "Errors", "0")
+	tui.tvProfileName = custom.NewStatusTextField(layoutStatusItemHeaderWidth, "Profile", "")
+	tui.tvTakeName = custom.NewStatusTextField(layoutStatusItemHeaderWidth, "Take", "")
+	tui.tvDirectory = custom.NewStatusTextField(layoutStatusItemHeaderWidth, "Directory", "")
 
-	statusColOffset := 0
-	statusGrid.AddItem(tui.tvTransportStatus.GetGrid(), 0, statusColOffset, 1, 1, 0, 0, false)
-	statusGrid.AddItem(tui.tvPosition.GetGrid(), 1, statusColOffset, 1, 1, 0, 0, false)
-	statusGrid.AddItem(tui.tvFormat.GetGrid(), 2, statusColOffset, 1, 1, 0, 0, false)
-	statusGrid.AddItem(tui.tvFileSize.GetGrid(), 3, statusColOffset, 1, 1, 0, 0, false)
-	statusGrid.AddItem(tui.tvErrorCount.GetGrid(), 4, statusColOffset, 1, 1, 0, 0, false)
-	statusGrid.AddItem(tui.tvProfileName.GetGrid(), 5, statusColOffset, 1, 1, 0, 0, false)
-	statusGrid.AddItem(tui.tvTakeName.GetGrid(), 6, statusColOffset, 1, 1, 0, 0, false)
-	statusGrid.AddItem(tui.tvDirectory.GetGrid(), 7, statusColOffset, 1, 2, 0, 0, false)
+	gridStatusMeters.AddItem(tui.tvTransportStatus.GetGrid(), 0, layoutStatusColumnIndex, 1, 1, 0, 0, false)
+	gridStatusMeters.AddItem(tui.tvPosition.GetGrid(), 1, layoutStatusColumnIndex, 1, 1, 0, 0, false)
+	gridStatusMeters.AddItem(tui.tvFormat.GetGrid(), 2, layoutStatusColumnIndex, 1, 1, 0, 0, false)
+	gridStatusMeters.AddItem(tui.tvFileSize.GetGrid(), 3, layoutStatusColumnIndex, 1, 1, 0, 0, false)
+	gridStatusMeters.AddItem(tui.tvErrorCount.GetGrid(), 4, layoutStatusColumnIndex, 1, 1, 0, 0, false)
+	gridStatusMeters.AddItem(tui.tvProfileName.GetGrid(), 5, layoutStatusColumnIndex, 1, 1, 0, 0, false)
+	gridStatusMeters.AddItem(tui.tvTakeName.GetGrid(), 6, layoutStatusColumnIndex, 1, 1, 0, 0, false)
+	gridStatusMeters.AddItem(tui.tvDirectory.GetGrid(), statusRowCount-1, layoutStatusColumnIndex, 1, 2, 0, 0, false)
 
-	tui.meterDiskSpace = custom.NewStatusMeter(headerWidth, "Disk Space", 0, "%")
-	tui.meterDiskLoad = custom.NewStatusMeter(headerWidth, "Disk Load", 0, "%")
-	tui.meterAudioLoad = custom.NewStatusMeter(headerWidth, "Audio Load", 0, "%")
-	tui.meterBuffer = custom.NewStatusMeter(headerWidth, "Buffer", 0, "%")
-	tui.meterCycleBuffer = custom.NewStatusMeter(headerWidth, "Cycle Buffer", 0, "%")
+	// progress bar status meters
+	tui.statusMeterDiskUsed = custom.NewStatusMeter(layoutStatusItemHeaderWidth, "Disk Space", 0, "%")
+	tui.statusMeterDiskLoad = custom.NewStatusMeter(layoutStatusItemHeaderWidth, "Disk Load", 0, "%")
+	tui.statusMeterAudioLoad = custom.NewStatusMeter(layoutStatusItemHeaderWidth, "Audio Load", 0, "%")
+	tui.statusMeterBufferUsed = custom.NewStatusMeter(layoutStatusItemHeaderWidth, "Buffer", 0, "%")
+	tui.statusMeterCycleBufferUsed = custom.NewStatusMeter(layoutStatusItemHeaderWidth, "Cycle Buffer", 0, "%")
 
-	meterColOffset := 1
-	statusGrid.AddItem(tui.meterDiskSpace.GetGrid(), 0, meterColOffset, 1, 1, 0, 0, false)
-	statusGrid.AddItem(tui.meterDiskLoad.GetGrid(), 1, meterColOffset, 1, 1, 0, 0, false)
-	statusGrid.AddItem(tui.meterAudioLoad.GetGrid(), 2, meterColOffset, 1, 1, 0, 0, false)
-	statusGrid.AddItem(tui.meterBuffer.GetGrid(), 3, meterColOffset, 1, 1, 0, 0, false)
-	statusGrid.AddItem(tui.meterCycleBuffer.GetGrid(), 4, meterColOffset, 1, 1, 0, 0, false)
-	tui.appGrid.AddItem(statusGrid, 0, 0, 1, 1, 0, 0, false)
+	gridStatusMeters.AddItem(tui.statusMeterDiskUsed.GetGrid(), 0, layoutMeterColumnIndex, 1, 1, 0, 0, false)
+	gridStatusMeters.AddItem(tui.statusMeterDiskLoad.GetGrid(), 1, layoutMeterColumnIndex, 1, 1, 0, 0, false)
+	gridStatusMeters.AddItem(tui.statusMeterAudioLoad.GetGrid(), 2, layoutMeterColumnIndex, 1, 1, 0, 0, false)
+	gridStatusMeters.AddItem(tui.statusMeterBufferUsed.GetGrid(), 3, layoutMeterColumnIndex, 1, 1, 0, 0, false)
+	gridStatusMeters.AddItem(tui.statusMeterCycleBufferUsed.GetGrid(), 4, layoutMeterColumnIndex, 1, 1, 0, 0, false)
 
-	tui.metersGrid = cview.NewGrid()
-	tui.metersGrid.SetPadding(0, 0, 0, 0)
-	tui.metersGrid.SetColumns(-1)
-	tui.appGrid.AddItem(tui.metersGrid, 1, 0, 1, 1, 0, 0, false)
+	tui.gridApp.AddItem(gridStatusMeters, 0, 0, 1, 1, 0, 0, false)
 
+	//
+	// grid for the level meters
+	tui.gridLevelMeters = cview.NewGrid()
+	tui.gridLevelMeters.SetPadding(0, 0, 0, 0)
+	tui.gridLevelMeters.SetColumns(-1)
+
+	tui.gridApp.AddItem(tui.gridLevelMeters, 1, 0, 1, 1, 0, 0, false)
+
+	//
+	// grid for the log output view
 	tui.tvLogs = cview.NewTextView()
 	tui.tvLogs.SetPadding(0, 0, 0, 0)
 	tui.tvLogs.SetDynamicColors(true)
-	tui.appGrid.AddItem(tui.tvLogs, 2, 0, 1, 1, 0, 0, true)
 
-	tui.app.SetRoot(tui.appGrid, true)
+	tui.gridApp.AddItem(tui.tvLogs, 2, 0, 1, 1, 0, 0, true)
+
+	tui.app.SetRoot(tui.gridApp, true)
 }
 
 func (tui *Tui) Start() {
@@ -366,25 +403,51 @@ func (tui *Tui) IncrementErrorCount() {
 func (tui *Tui) UpdateSignalLevels(levels []*model.SignalLevel) {
 	for i := range levels {
 		level := levels[i]
-		tui.meters[i].SetLevel(level.Instant)
+		tui.elementLevelMeters[i].SetLevel(level.Instant)
 	}
 }
 
 func (tui *Tui) SetChannelArmStatus(channel int, armed bool) {
-	tui.meters[channel].ArmChannel(armed)
+	tui.elementLevelMeters[channel].ArmChannel(armed)
+}
+
+func (tui *Tui) SetOutputFiles(outputFiles []model.UiOutputFile) {
+	fileCount := len(outputFiles)
+	tui.elementOutputFiles = make([]*custom.OutputFileField, fileCount)
+
+	outputFileRows := make([]int, fileCount+1)
+	for i := range fileCount {
+		outputFileRows[i] = 1
+	}
+	outputFileRows[fileCount] = -1
+
+	tui.gridOutputFiles.SetRows(outputFileRows...)
+
+	// loop through and create a new output file ui item for each output file
+	for i, outputFile := range outputFiles {
+		outputFileField := custom.NewOutputFileField(layoutOutputFilePortsWidth, layoutOutputFileSizeWidth, outputFile)
+		tui.elementOutputFiles[i] = outputFileField
+		tui.gridOutputFiles.AddItem(outputFileField.GetGrid(), i, 0, 1, 1, 0, 0, false)
+	}
+}
+
+func (tui *Tui) UpdateOutputFileSizes(sizes []uint64) {
+	for i, size := range sizes {
+		tui.elementOutputFiles[i].SetSize(size)
+	}
 }
 
 func (tui *Tui) SetChannelCount(channelCount int) {
+	tui.elementLevelMeters = make([]*custom.LevelMeter, channelCount)
+
 	levelColumns := make([]int, channelCount+2)
 	levelColumns[0] = 5
 	for i := range channelCount {
-		levelColumns[i+1] = meterWidth
+		levelColumns[i+1] = layoutMeterWidth
 	}
 	levelColumns[channelCount+1] = -1
 
-	tui.metersGrid.SetColumns(levelColumns...)
-
-	tui.meters = make([]*custom.LevelMeter, channelCount)
+	tui.gridLevelMeters.SetColumns(levelColumns...)
 
 	meterStepLabel := cview.NewTextView()
 	meterStepLabel.SetPadding(0, 0, 0, 0)
@@ -395,22 +458,22 @@ func (tui *Tui) SetChannelCount(channelCount int) {
 		meterStepLabel.Write([]byte(fmt.Sprintf("%3v\n", fmt.Sprintf("%d", meterSteps[step]))))
 		// meterStepLabels = append(meterStepLabels, fmt.Sprintf("%3v", fmt.Sprintf("%d", meterSteps[step])))
 	}
-	tui.metersGrid.AddItem(meterStepLabel, 0, 0, 1, 1, 0, 0, false)
+	tui.gridLevelMeters.AddItem(meterStepLabel, 0, 0, 1, 1, 0, 0, false)
 
 	for i := range channelCount {
-		tui.meters[i] = custom.NewLevelMeter(meterSteps, levelColors)
-		tui.meters[i].SetBorder(false)
-		tui.meters[i].SetPadding(0, 0, 1, 1)
-		tui.meters[i].SetMinLevel(-150)
-		tui.meters[i].SetLevel(-99)
-		tui.meters[i].SetChannelNumber(fmt.Sprintf("%d", i+1))
-		tui.meters[i].ArmChannel(false)
+		tui.elementLevelMeters[i] = custom.NewLevelMeter(meterSteps, levelColors)
+		tui.elementLevelMeters[i].SetBorder(false)
+		tui.elementLevelMeters[i].SetPadding(0, 0, 1, 1)
+		tui.elementLevelMeters[i].SetMinLevel(-150)
+		tui.elementLevelMeters[i].SetLevel(-99)
+		tui.elementLevelMeters[i].SetChannelNumber(fmt.Sprintf("%d", i+1))
+		tui.elementLevelMeters[i].ArmChannel(false)
 
 		if i%2 == 1 {
-			tui.meters[i].SetBackgroundColor(theme.LevelMeterAlternateBackgroundColor)
+			tui.elementLevelMeters[i].SetBackgroundColor(theme.LevelMeterAlternateBackgroundColor)
 		}
 
-		tui.metersGrid.AddItem(tui.meters[i], 0, i+1, 1, 1, 0, 0, false)
+		tui.gridLevelMeters.AddItem(tui.elementLevelMeters[i], 0, i+1, 1, 1, 0, 0, false)
 	}
 }
 
@@ -441,21 +504,21 @@ func (tui *Tui) WriteLog(message string) {
 //
 
 func (tui *Tui) SetAudioLoad(percent int) {
-	tui.updateMeter(tui.meterAudioLoad, percent, 20, 50)
+	tui.updateMeter(tui.statusMeterAudioLoad, percent, 20, 50)
 }
 
 func (tui *Tui) SetDiskUsage(percent int) {
-	tui.updateMeter(tui.meterDiskSpace, percent, 20, 50)
+	tui.updateMeter(tui.statusMeterDiskUsed, percent, 20, 50)
 }
 
 func (tui *Tui) SetBufferUtilization(percent int) {
-	tui.updateMeter(tui.meterBuffer, percent, 50, 75)
+	tui.updateMeter(tui.statusMeterBufferUsed, percent, 50, 75)
 }
 
 func (tui *Tui) SetDiskLoad(percent int) {
-	tui.updateMeter(tui.meterDiskLoad, percent, 50, 75)
+	tui.updateMeter(tui.statusMeterDiskLoad, percent, 50, 75)
 }
 
 func (tui *Tui) SetCycleBuffer(percent int) {
-	tui.updateMeter(tui.meterCycleBuffer, percent, 20, 50)
+	tui.updateMeter(tui.statusMeterCycleBufferUsed, percent, 20, 50)
 }

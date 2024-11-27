@@ -126,7 +126,9 @@ func (server *JackServer) StartServer() error {
 	go func() {
 		err = server.cmd.Run()
 		if err != nil {
-			slog.Error("Error occurred starting 'jackd' command: " + err.Error())
+			if !strings.Contains(err.Error(), "signal: killed") {
+				slog.Error("Error occurred starting 'jackd' command: " + err.Error())
+			}
 		}
 
 		reaper.Done("jack server")
@@ -165,13 +167,15 @@ func (server *JackServer) StartServer() error {
 
 			if strings.HasPrefix(line, "Default input and output devices are not the same") {
 				util.TraceLog("jackd: " + line)
+			} else if strings.HasPrefix(line, "Cannot open default device in duplex mode") {
+				slog.Warn(line)
 			} else {
 				slog.Error("jackd: " + line)
 			}
 		}
 	}()
 
-	// TODO: handle jack startup failure!!
+	// handle jack startup failure
 	for {
 		select {
 		case <-readyChan:

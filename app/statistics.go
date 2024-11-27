@@ -51,9 +51,9 @@ type statistics struct {
 	diskProcessElapsedChan   chan int64
 	diskProcessIdleChan      chan int64
 
-	shutdownChan     chan bool
-	samplesProcessed uint64
-	framesProcessed  uint64
+	shutdownChan    chan bool
+	framesProcessed uint64
+	// samplesProcessed uint64
 
 	diskPerformance   []float64
 	bufferUtilization []float64
@@ -69,8 +69,8 @@ func initStatistics(profile *model.Profile) chan bool {
 		diskProcessElapsedChan: make(chan int64, 1),
 		diskProcessIdleChan:    make(chan int64, 1),
 
-		shutdownChan:     make(chan bool, 5),
-		samplesProcessed: 0,
+		shutdownChan: make(chan bool, 5),
+		// samplesProcessed: 0,
 
 		diskPerformance:   make([]float64, samplesToAverage),
 		bufferUtilization: make([]float64, samplesToAverage),
@@ -84,15 +84,29 @@ func initStatistics(profile *model.Profile) chan bool {
 		channels += len(channel.Ports)
 	}
 
-	// disk space utilization & session size
-	processOnInterval("disk space & session size stats", stats.shutdownChan, 1000, func() {
-		// get bytes read from jack
-		usedBytesRaw := (stats.samplesProcessed * uint64(profile.Output.BitDepth)) / 8
+	// session size
+	processOnInterval("session size stats", stats.shutdownChan, 500, func() {
+		usedBytes := uint64(0)
 
-		// add 44 for each wav file header
-		usedBytes := usedBytesRaw + (uint64(len(profile.Channels)) * 44)
+		outputFileSizes := make([]uint64, len(outputFiles))
+		for i, outputFile := range outputFiles {
+			outputFileSizes[i] = uint64(outputFile.Encoder.WrittenBytes)
+			usedBytes += uint64(outputFile.Encoder.WrittenBytes)
+		}
+
+		displayHandle.tui.UpdateOutputFileSizes(outputFileSizes)
 		displayHandle.tui.SetSessionSize(usedBytes)
 
+		// get bytes read from jack
+		// usedBytesRaw := (stats.samplesProcessed * uint64(profile.Output.BitDepth)) / 8
+
+		// add 44 for each wav file header
+		// usedBytes := usedBytesRaw + (uint64(len(profile.Channels)) * 44)
+		// displayHandle.tui.SetSessionSize(usedBytes)
+	})
+
+	// disk space utilization
+	processOnInterval("disk space", stats.shutdownChan, 5000, func() {
 		diskInfo := util.GetDiskSpace(profile.Output.Directory)
 		displayHandle.tui.SetDiskUsage(int(math.Round(diskInfo.UsedPct * 100.0)))
 
