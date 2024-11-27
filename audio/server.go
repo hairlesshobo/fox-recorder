@@ -64,7 +64,7 @@ type JackServer struct {
 	cmd *exec.Cmd
 }
 
-func NewServer(config *model.Config, profile *model.Profile) *JackServer {
+func NewServer(config *model.Config, profile *model.Profile, infoCallback func(string), errorCallback func(string)) *JackServer {
 	audioInterfaceParts := strings.Split(profile.AudioServer.Interface[0], "/")
 
 	// TODO: add support for trying multiple audio interfaces
@@ -85,6 +85,9 @@ func NewServer(config *model.Config, profile *model.Profile) *JackServer {
 
 		ports: make([]*Port, 0),
 	}
+
+	server.SetErrorCallback(infoCallback)
+	server.SetInfoCallback(errorCallback)
 
 	return &server
 }
@@ -193,7 +196,7 @@ func (server *JackServer) StartServer() error {
 	}
 }
 
-func (server *JackServer) Connect() {
+func (server *JackServer) Connect(processCallback jack.ProcessCallback, xrunCallback jack.XRunCallback, shutdownCallback jack.ShutdownCallback) {
 	reaper.Register("jack client")
 
 	slog.Info("Connecting to JACK server")
@@ -211,6 +214,10 @@ func (server *JackServer) Connect() {
 	slog.Info("JACK server connected")
 
 	server.populatePorts()
+
+	server.SetProcessCallback(processCallback)
+	server.SetXrunCallback(xrunCallback)
+	server.SetShutdownCallback(shutdownCallback)
 }
 
 func (server *JackServer) PrepareOutputFiles() {
@@ -475,7 +482,7 @@ func (server *JackServer) GetOutputPorts() []*Port {
 // callback registration
 //
 
-func (server *JackServer) SetProcessCallback(callback func(nframes uint32) int) {
+func (server *JackServer) SetProcessCallback(callback jack.ProcessCallback) {
 	if code := server.jackClient.SetProcessCallback(callback); code != 0 {
 		slog.Error(fmt.Sprintf("Failed to set process callback: %s", jack.StrError(code)))
 		return
@@ -490,11 +497,11 @@ func (server *JackServer) SetInfoCallback(callback func(string)) {
 	jack.SetInfoFunction(callback)
 }
 
-func (server *JackServer) SetShutdownCallback(callback func()) {
+func (server *JackServer) SetShutdownCallback(callback jack.ShutdownCallback) {
 	server.jackClient.OnShutdown(callback)
 }
 
-func (server *JackServer) SetXrunCallback(callback func() int) {
+func (server *JackServer) SetXrunCallback(callback jack.XRunCallback) {
 	server.jackClient.SetXRunCallback(callback)
 }
 
