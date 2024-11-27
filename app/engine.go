@@ -38,12 +38,12 @@ import (
 	"fox-audio/shared"
 )
 
-type displayObj struct {
-	tui *display.Tui
-}
+// type displayObj struct {
+// 	tui *display.Tui
+// }
 
 var (
-	displayHandle displayObj
+	displayHandle display.UI
 	audioServer   *audio.JackServer
 	ports         []*audio.Port
 	outputFiles   []*audio.OutputFile
@@ -74,9 +74,9 @@ func ConfigureFileLogger() {
 	shared.EnableSlogLogging()
 }
 
-func ConfigureTuiLogger() {
-	handler := shared.NewTuiLogHandler(displayHandle.tui, slog.LevelDebug, func(message string) {
-		displayHandle.tui.IncrementErrorCount()
+func ConfigureUiLogger() {
+	handler := shared.NewTuiLogHandler(displayHandle, slog.LevelDebug, func(message string) {
+		displayHandle.IncrementErrorCount()
 	})
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
@@ -86,11 +86,16 @@ func ConfigureTuiLogger() {
 }
 
 func runEngine(config *model.Config, profile *model.Profile, simulationOptions *model.SimulationOptions) {
-	displayHandle.tui = display.NewTui()
-	displayHandle.tui.Initalize()
-	displayHandle.tui.SetTransportStatus(display.StatusStarting)
-	displayHandle.tui.Start()
-	reaper.Callback("tui", displayHandle.tui.Shutdown)
+	if config.OutputType == model.OutputTUI {
+		displayHandle = display.NewTui()
+	} else if config.OutputType == model.OutputJSON {
+		displayHandle = display.NewJsonUI(os.Stdout)
+	}
+
+	displayHandle.Initalize()
+	displayHandle.SetTransportStatus(display.StatusStarting)
+	displayHandle.Start()
+	reaper.Callback("tui", displayHandle.Shutdown)
 
 	statsShutdownChan := initStatistics(profile)
 	reaper.Callback("stats", func() { statsShutdownChan <- true })
@@ -104,7 +109,7 @@ func runEngine(config *model.Config, profile *model.Profile, simulationOptions *
 	})
 
 	// ConfigureTextLogger()
-	ConfigureTuiLogger()
+	ConfigureUiLogger()
 	// ConfigureFileLogger()
 
 	if !simulationOptions.EnableSimulation {
@@ -113,7 +118,7 @@ func runEngine(config *model.Config, profile *model.Profile, simulationOptions *
 		jackRunning := getJackServer(profile)
 
 		if jackRunning {
-			displayHandle.tui.SetTransportStatus(display.StatusPaused)
+			displayHandle.SetTransportStatus(display.StatusPaused)
 
 			audioServer.Connect(jackProcess, jackXrun, jackShutdown)
 			reaper.Callback("disconnect jack server", audioServer.Disconnect)
@@ -144,7 +149,7 @@ func runEngine(config *model.Config, profile *model.Profile, simulationOptions *
 
 	// this blocks until the jack connection shuts down
 	if simulationOptions.EnableSimulation {
-		displayHandle.tui.SetChannelCount(simulationOptions.ChannelCount)
+		displayHandle.SetChannelCount(simulationOptions.ChannelCount)
 		startSimulation(simulationOptions)
 	}
 
@@ -156,7 +161,7 @@ func runEngine(config *model.Config, profile *model.Profile, simulationOptions *
 
 func doShutdown() {
 	transportRecord = false
-	displayHandle.tui.SetTransportStatus(display.StatusShuttingDown)
+	displayHandle.SetTransportStatus(display.StatusShuttingDown)
 }
 
 func uiSetupOutputFiles() {
@@ -173,25 +178,25 @@ func uiSetupOutputFiles() {
 			Size:  0,
 		}
 	}
-	displayHandle.tui.SetOutputFiles(uiOutputFiles)
+	displayHandle.SetOutputFiles(uiOutputFiles)
 }
 
 func uiSetupLevelMeters() {
-	displayHandle.tui.SetChannelCount(len(ports))
-	signalLevels = make([]*model.SignalLevel, len(ports))
+	displayHandle.SetChannelCount(len(ports))
+	signalLevels = make([]model.SignalLevel, len(ports))
 
 	for i, port := range ports {
-		displayHandle.tui.SetChannelArmStatus(i, port.IsArmed())
+		displayHandle.SetChannelArmStatus(i, port.IsArmed())
 	}
 }
 
 func uiSetOuputFormat(profile *model.Profile) {
 	sampleRateStr := strconv.FormatFloat(float64(audioServer.GetSampleRate())/1000.0, 'f', -1, 64)
-	displayHandle.tui.SetAudioFormat(fmt.Sprintf("%d bit / %s KHz", profile.Output.BitDepth, sampleRateStr))
-	displayHandle.tui.SetTransportStatus(display.StatusRecording)
-	displayHandle.tui.SetProfileName(profile.Name)
-	displayHandle.tui.SetTakeName(profile.Output.Take)
-	displayHandle.tui.SetDirectory(profile.Output.Directory)
+	displayHandle.SetAudioFormat(fmt.Sprintf("%d bit / %s KHz", profile.Output.BitDepth, sampleRateStr))
+	displayHandle.SetTransportStatus(display.StatusRecording)
+	displayHandle.SetProfileName(profile.Name)
+	displayHandle.SetTakeName(profile.Output.Take)
+	displayHandle.SetDirectory(profile.Output.Directory)
 }
 
 func setupCycleBuffer(profile *model.Profile) {
@@ -209,7 +214,7 @@ func getJackServer(profile *model.Profile) bool {
 		err := audioServer.StartServer()
 		if err != nil {
 			slog.Error(err.Error())
-			displayHandle.tui.SetTransportStatus(display.StatusFailed)
+			displayHandle.SetTransportStatus(display.StatusFailed)
 			jackRunning = false
 			reaper.Reap()
 		} else {

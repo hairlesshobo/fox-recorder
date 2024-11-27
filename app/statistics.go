@@ -94,21 +94,21 @@ func initStatistics(profile *model.Profile) chan bool {
 			usedBytes += uint64(outputFile.Encoder.WrittenBytes)
 		}
 
-		displayHandle.tui.UpdateOutputFileSizes(outputFileSizes)
-		displayHandle.tui.SetSessionSize(usedBytes)
+		displayHandle.UpdateOutputFileSizes(outputFileSizes)
+		displayHandle.SetSessionSize(usedBytes)
 
 		// get bytes read from jack
 		// usedBytesRaw := (stats.samplesProcessed * uint64(profile.Output.BitDepth)) / 8
 
 		// add 44 for each wav file header
 		// usedBytes := usedBytesRaw + (uint64(len(profile.Channels)) * 44)
-		// displayHandle.tui.SetSessionSize(usedBytes)
+		// displayHandle.SetSessionSize(usedBytes)
 	})
 
 	// disk space utilization
 	processOnInterval("disk space", stats.shutdownChan, 5000, func() {
 		diskInfo := util.GetDiskSpace(profile.Output.Directory)
-		displayHandle.tui.SetDiskUsage(int(math.Round(diskInfo.UsedPct * 100.0)))
+		displayHandle.SetDiskUsage(int(math.Round(diskInfo.UsedPct * 100.0)))
 
 		util.TraceLog(fmt.Sprintf("Disk total: %d B, Disk Used: %d B, Disk free: %d B, used %0.2f%%", diskInfo.Size, diskInfo.Used, diskInfo.Free, diskInfo.UsedPct*100.0))
 	})
@@ -133,7 +133,7 @@ func initStatistics(profile *model.Profile) chan bool {
 			stats.bufferUtilization = pushStatistic(stats.bufferUtilization, bufferPct, samplesToAverage)
 			avgBufferPct := math.Round(averageStatistic(stats.cycleLoad) * 100.0)
 
-			displayHandle.tui.SetBufferUtilization(int(avgBufferPct))
+			displayHandle.SetBufferUtilization(int(avgBufferPct))
 			util.TraceLog(fmt.Sprintf("buffer: %0.2f%%", avgBufferPct))
 		}
 	})
@@ -151,7 +151,7 @@ func initStatistics(profile *model.Profile) chan bool {
 				stats.diskPerformance = pushStatistic(stats.diskPerformance, diskLoadPct, samplesToAverage)
 				avgDiskLoadPct := math.Round(averageStatistic(stats.cycleLoad) * 100.0)
 
-				displayHandle.tui.SetDiskLoad(int(avgDiskLoadPct))
+				displayHandle.SetDiskLoad(int(avgDiskLoadPct))
 				util.TraceLog(fmt.Sprintf("disk Idle time: %d us, Process time: %d us, load %0.3f%%", idleDuration, writeDuration, avgDiskLoadPct))
 			}
 		}
@@ -172,7 +172,7 @@ func initStatistics(profile *model.Profile) chan bool {
 				stats.audioLoad = pushStatistic(stats.audioLoad, audioLoadPct, samplesToAverage)
 				avgAudioLoadPct := math.Round(averageStatistic(stats.audioLoad) * 100.0)
 
-				displayHandle.tui.SetAudioLoad(int(avgAudioLoadPct))
+				displayHandle.SetAudioLoad(int(avgAudioLoadPct))
 				util.TraceLog(fmt.Sprintf("audio Idle time: %d us, Process time: %d us, load %0.3f%%", idleDuration, writeDuration, avgAudioLoadPct))
 			}
 
@@ -183,13 +183,13 @@ func initStatistics(profile *model.Profile) chan bool {
 				stats.cycleLoad = pushStatistic(stats.cycleLoad, cycleBuffer, samplesToAverage)
 				avgCycleBuffer := math.Round(averageStatistic(stats.cycleLoad) * 100.0)
 
-				displayHandle.tui.SetCycleBuffer(int(avgCycleBuffer))
+				displayHandle.SetCycleBuffer(int(avgCycleBuffer))
 				util.TraceLog(fmt.Sprintf("cycle buffer: %03f%%", cycleBuffer))
 			}
 
 			// recording duration
 			duration := float64(stats.framesProcessed) / float64(profile.AudioServer.SampleRate)
-			displayHandle.tui.SetDuration(duration)
+			displayHandle.SetDuration(duration)
 		}
 	}()
 

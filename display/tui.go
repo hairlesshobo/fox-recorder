@@ -41,17 +41,6 @@ import (
 // constants
 //
 
-type Status int
-
-const (
-	StatusPaused Status = iota
-	StatusPlaying
-	StatusRecording
-	StatusStarting
-	StatusShuttingDown
-	StatusFailed
-)
-
 const (
 	layoutMeterWidth            = 4
 	layoutStatusItemHeaderWidth = 18
@@ -302,7 +291,7 @@ func (tui *Tui) excecuteLoop() {
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	fmt.Println("shutting down tui")
+	// fmt.Println("shutting down tui")
 }
 
 func (tui *Tui) updateMeter(meter *custom.StatusMeter, value, warnPct, cautionPct int) {
@@ -336,28 +325,24 @@ func (tui *Tui) SetTransportStatus(status Status) {
 	if status == StatusPaused {
 		icon = theme.RunePause
 		color = theme.Blue
-		transportStatus = "Paused"
 	} else if status == StatusPlaying {
 		icon = theme.RunePlay
 		color = theme.Green
-		transportStatus = "Playing"
 	} else if status == StatusRecording {
 		icon = theme.RuneRecord
 		color = theme.Red
-		transportStatus = "Recording"
 	} else if status == StatusStarting {
 		icon = theme.RuneClock
 		color = theme.Yellow
-		transportStatus = "Starting Audio Server"
 	} else if status == StatusShuttingDown {
 		icon = theme.RuneClock
 		color = theme.Yellow
-		transportStatus = "Shutting down"
 	} else if status == StatusFailed {
 		icon = theme.RuneFailed
 		color = theme.Red
-		transportStatus = "Failed"
 	}
+
+	transportStatus = statusNames[status]
 
 	tui.tvTransportStatus.SetCurrentValue(string(icon) + " " + transportStatus)
 	tui.tvTransportStatus.SetColor(color)
@@ -400,7 +385,7 @@ func (tui *Tui) IncrementErrorCount() {
 // channel strips
 //
 
-func (tui *Tui) UpdateSignalLevels(levels []*model.SignalLevel) {
+func (tui *Tui) UpdateSignalLevels(levels []model.SignalLevel) {
 	for i := range levels {
 		level := levels[i]
 		tui.elementLevelMeters[i].SetLevel(level.Instant)
@@ -493,10 +478,6 @@ func (tui *Tui) WriteLevelLog(level slog.Level, message string) {
 	}
 
 	tui.tvLogs.Write([]byte(fmt.Sprintf("[%s][%s[] [%s[] %s[-:-:-]\n", color, time.Now().Format("2006-01-02 15:04:05"), level.String(), message)))
-}
-
-func (tui *Tui) WriteLog(message string) {
-	tui.tvLogs.Write([]byte(fmt.Sprintf("[%s[] %s\n", time.Now().Format("2006-01-02 15:04:05"), message)))
 }
 
 //

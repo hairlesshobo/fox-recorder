@@ -32,7 +32,7 @@ import (
 )
 
 var (
-	signalLevels     []*model.SignalLevel
+	signalLevels     []model.SignalLevel
 	cycleDoneChannel chan bool
 
 	transportRecord bool
@@ -95,7 +95,7 @@ func jackProcess(nframes uint32) int {
 		}
 
 		if !reaper.Reaped() {
-			signalLevels[portNum] = &model.SignalLevel{
+			signalLevels[portNum] = model.SignalLevel{
 				Instant: int(util.AmplitudeToDb(sigLevel)),
 			}
 
@@ -119,13 +119,13 @@ func jackProcess(nframes uint32) int {
 				}
 			}
 		} else {
-			signalLevels[portNum] = &model.SignalLevel{
+			signalLevels[portNum] = model.SignalLevel{
 				Instant: -150,
 			}
 		}
 	}
 
-	displayHandle.tui.UpdateSignalLevels(signalLevels)
+	displayHandle.UpdateSignalLevels(signalLevels)
 
 	if !reaper.Reaped() {
 		cycleDoneChannel <- true

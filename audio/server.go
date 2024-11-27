@@ -129,7 +129,8 @@ func (server *JackServer) StartServer() error {
 	go func() {
 		err = server.cmd.Run()
 		if err != nil {
-			if !strings.Contains(err.Error(), "signal: killed") {
+			if !strings.Contains(err.Error(), "signal: killed") &&
+				!strings.Contains(err.Error(), "wait: no child processes") {
 				slog.Error("Error occurred starting 'jackd' command: " + err.Error())
 			}
 		}

@@ -20,49 +20,26 @@
 //			limitations under the License.
 //
 // =================================================================================
-package shared
+package display
 
-import (
-	"context"
-	"log/slog"
+type Status int
 
-	"fox-audio/display"
+const (
+	StatusPaused Status = iota
+	StatusPlaying
+	StatusRecording
+	StatusStarting
+	StatusShuttingDown
+	StatusFailed
 )
 
-type TuiLogHandler struct {
-	level         slog.Level
-	tui           *display.Tui
-	errorCallback func(string)
-}
-
-func NewTuiLogHandler(out *display.Tui, level slog.Level, errorCallback func(string)) *TuiLogHandler {
-	h := &TuiLogHandler{
-		level:         level,
-		tui:           out,
-		errorCallback: errorCallback,
+var (
+	statusNames = map[Status]string{
+		0: "Paused",
+		1: "Playing",
+		2: "Recording",
+		3: "Starting Audio Server",
+		4: "Shutting down",
+		5: "Failed",
 	}
-
-	return h
-}
-
-func (h *TuiLogHandler) Handle(ctx context.Context, r slog.Record) error {
-	h.tui.WriteLevelLog(r.Level, r.Message)
-
-	if r.Level == slog.LevelError {
-		h.errorCallback(r.Message)
-	}
-
-	return nil
-}
-
-func (h *TuiLogHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return level >= h.level
-}
-
-func (h *TuiLogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return h
-}
-
-func (h *TuiLogHandler) WithGroup(name string) slog.Handler {
-	return h
-}
+)

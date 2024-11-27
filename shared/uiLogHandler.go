@@ -20,20 +20,49 @@
 //			limitations under the License.
 //
 // =================================================================================
-package model
+package shared
 
-type OutputType int
+import (
+	"context"
+	"log/slog"
 
-const (
-	OutputTUI OutputType = iota
-	OutputJSON
-	OutputText
+	"fox-audio/display"
 )
 
-type Config struct {
-	JackClientName               string
-	ProfileDirectory             string
-	LogLevel                     int
-	HardwarePortConnectionPrefix string
-	OutputType                   OutputType
+type UiLogHandler struct {
+	level         slog.Level
+	ui            display.UI
+	errorCallback func(string)
+}
+
+func NewTuiLogHandler(out display.UI, level slog.Level, errorCallback func(string)) *UiLogHandler {
+	h := &UiLogHandler{
+		level:         level,
+		ui:            out,
+		errorCallback: errorCallback,
+	}
+
+	return h
+}
+
+func (h *UiLogHandler) Handle(ctx context.Context, r slog.Record) error {
+	h.ui.WriteLevelLog(r.Level, r.Message)
+
+	if r.Level == slog.LevelError {
+		h.errorCallback(r.Message)
+	}
+
+	return nil
+}
+
+func (h *UiLogHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return level >= h.level
+}
+
+func (h *UiLogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return h
+}
+
+func (h *UiLogHandler) WithGroup(name string) slog.Handler {
+	return h
 }

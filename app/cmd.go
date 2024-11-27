@@ -25,6 +25,8 @@ package app
 import (
 	"log/slog"
 	"os"
+	"slices"
+	"strings"
 
 	"fox-audio/model"
 	"fox-audio/util"
@@ -38,6 +40,13 @@ var (
 	argSimulateChannelCount int
 	argSimulateFreezeMeters bool
 	argProfileName          string
+	argOutputType           string
+
+	outputTypeMap = map[string]model.OutputType{
+		"tui":  model.OutputTUI,
+		"json": model.OutputJSON,
+		"text": model.OutputText,
+	}
 
 	rootCmd = &cobra.Command{
 		Use:   "record",
@@ -46,6 +55,11 @@ var (
 		Run: func(cmd *cobra.Command, args []string) {
 			// util.DumpRunes(10500, 200)
 			// return
+
+			if !slices.Contains([]string{"json", "tui"}, strings.ToLower(argOutputType)) {
+				slog.Error("Invalid output type specified: " + argOutputType)
+				os.Exit(1)
+			}
 
 			if argProfileName == "" {
 				slog.Error("Profile not specified but is REQUIRED. See fox --help for more info")
@@ -59,6 +73,7 @@ var (
 				JackClientName:               "fox",
 				ProfileDirectory:             "",
 				LogLevel:                     int(slog.LevelInfo),
+				OutputType:                   outputTypeMap[argOutputType],
 				HardwarePortConnectionPrefix: "system:capture_", //"multiplier:out",
 			}
 
@@ -79,7 +94,9 @@ func init() {
 	rootCmd.Flags().BoolVar(&argSimulateFreezeMeters, "simulate-freeze-meters", false, "Freeze the meters (don't randomly set level)")
 	rootCmd.Flags().IntVar(&argSimulateChannelCount, "simulate-channel-count", 32, "Mumber of channels to simulate in UI test")
 
-	rootCmd.Flags().StringVarP(&argProfileName, "profile", "p", "", "Name or path of the profile to load, REQUIRED")
+	rootCmd.Flags().StringVarP(&argProfileName, "profile", "p", "default", "Name or path of the profile to load")
+
+	rootCmd.Flags().StringVar(&argOutputType, "output-type", "tui", "Output type (valid options: json, tui)")
 
 	// TODO: implement empty file auto deletion
 }

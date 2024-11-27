@@ -35,10 +35,10 @@ func startSimulation(simulationOptions *model.SimulationOptions) {
 
 	go func() {
 		t := time.NewTicker(150 * time.Millisecond)
-		levels := make([]*model.SignalLevel, simulationOptions.ChannelCount)
+		levels := make([]model.SignalLevel, simulationOptions.ChannelCount)
 
-		displayHandle.tui.SetTransportStatus(2)
-		displayHandle.tui.SetAudioFormat("24 bit / 48k WAV")
+		displayHandle.SetTransportStatus(2)
+		displayHandle.SetAudioFormat("24 bit / 48k WAV")
 
 		size := uint64(0)
 
@@ -52,14 +52,14 @@ func startSimulation(simulationOptions *model.SimulationOptions) {
 			for channel := range simulationOptions.ChannelCount {
 				newLevel := (rand.IntN(70) + 0) * (-1)
 
-				levels[channel] = &model.SignalLevel{
+				levels[channel] = model.SignalLevel{
 					Instant: int(newLevel),
 				}
 			}
 
 			// Queue draw
-			displayHandle.tui.UpdateSignalLevels(levels)
-			displayHandle.tui.SetSessionSize(size)
+			displayHandle.UpdateSignalLevels(levels)
+			displayHandle.SetSessionSize(size)
 
 			if simulationOptions.FreezeMeters {
 				break

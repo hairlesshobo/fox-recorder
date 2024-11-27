@@ -20,20 +20,36 @@
 //			limitations under the License.
 //
 // =================================================================================
-package model
+package display
 
-type OutputType int
-
-const (
-	OutputTUI OutputType = iota
-	OutputJSON
-	OutputText
+import (
+	"fox-audio/model"
+	"log/slog"
 )
 
-type Config struct {
-	JackClientName               string
-	ProfileDirectory             string
-	LogLevel                     int
-	HardwarePortConnectionPrefix string
-	OutputType                   OutputType
+type UI interface {
+	Initalize()
+	Start()
+	Shutdown()
+	IsShutdown() bool
+	WaitForShutdown()
+	SetTransportStatus(status Status)
+	SetDuration(duration float64)
+	SetAudioFormat(format string)
+	SetProfileName(value string)
+	SetTakeName(value string)
+	SetDirectory(value string)
+	SetSessionSize(size uint64)
+	IncrementErrorCount()
+	UpdateSignalLevels(levels []model.SignalLevel)
+	SetChannelArmStatus(channel int, armed bool)
+	SetOutputFiles(outputFiles []model.UiOutputFile)
+	UpdateOutputFileSizes(sizes []uint64)
+	SetChannelCount(channelCount int)
+	WriteLevelLog(level slog.Level, message string)
+	SetAudioLoad(percent int)
+	SetDiskUsage(percent int)
+	SetBufferUtilization(percent int)
+	SetDiskLoad(percent int)
+	SetCycleBuffer(percent int)
 }
