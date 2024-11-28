@@ -42,6 +42,8 @@ func startDiskWriter(profile *model.Profile) {
 }
 
 func diskWriter(profile *model.Profile) {
+	defer reaper.HandlePanic()
+
 out:
 	for {
 		select {

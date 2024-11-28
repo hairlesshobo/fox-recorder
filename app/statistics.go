@@ -140,6 +140,8 @@ func initStatistics(profile *model.Profile) chan bool {
 
 	// disk load
 	go func() {
+		defer reaper.HandlePanic()
+
 		for {
 			idleDuration := <-stats.diskProcessIdleChan
 			writeDuration := <-stats.diskProcessElapsedChan
@@ -161,6 +163,8 @@ func initStatistics(profile *model.Profile) chan bool {
 	// this triggers on every call of "process" so it needs to be fast since it
 	// runs in sync with that method
 	go func() {
+		defer reaper.HandlePanic()
+
 		for {
 			idleDuration := <-stats.jackProcessIdleChan
 			writeDuration := <-stats.jackProcessElapsedChan
@@ -200,6 +204,8 @@ func processOnInterval(name string, shutdownChan chan bool, milliseconds int, pr
 	reaper.Register(name)
 
 	go func() {
+		defer reaper.HandlePanic()
+
 		process()
 
 		t := time.NewTicker(time.Duration(milliseconds) * time.Millisecond)

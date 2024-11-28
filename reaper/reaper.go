@@ -35,6 +35,10 @@ var (
 	reaperCallbacks     []callback
 	reaperRegistrations []string
 	reaperWaitgroup     sync.WaitGroup
+
+	handlePanic func() = func() {
+		// default hanlder for panics
+	}
 )
 
 type callback struct {
@@ -53,11 +57,27 @@ func Reaped() bool {
 	return len(reapRequested) > 0
 }
 
+func SetPanicHandler(handler func()) {
+	handlePanic = handler
+}
+
+func HandlePanic() {
+	defer handlePanic()
+
+	r := recover()
+
+	if r != nil {
+		panic(r)
+	}
+}
+
 func Reap() {
 	if len(reapRequested) == 0 {
 		reapRequested <- true
 
 		go func() {
+			defer HandlePanic()
+
 			callbacksReversed := slices.Clone(reaperCallbacks)
 			slices.Reverse(callbacksReversed)
 

@@ -112,6 +112,8 @@ func (j *JsonUI) Start() {
 }
 
 func (j *JsonUI) excecuteLoop() {
+	defer j.HandlePanic()
+
 	slog.Debug("JSON loop started")
 
 	for {
@@ -189,9 +191,7 @@ func (j *JsonUI) SetChannelArmStatus(channel int, armed bool) {
 func (j *JsonUI) SetOutputFiles(outputFiles []model.UiOutputFile) {
 	j.outputFiles = make([]model.UiOutputFile, len(outputFiles))
 
-	for i, file := range outputFiles {
-		j.outputFiles[i] = file
-	}
+	copy(outputFiles, j.outputFiles)
 }
 
 func (j *JsonUI) UpdateOutputFileSizes(sizes []uint64) {
@@ -234,6 +234,10 @@ func (j *JsonUI) SetDiskLoad(percent int) {
 
 func (j *JsonUI) SetCycleBuffer(percent int) {
 	j.metricCycleBufferUsedPct = percent
+}
+
+func (j *JsonUI) HandlePanic() {
+	// TODO: what should we do here?
 }
 
 //

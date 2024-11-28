@@ -38,10 +38,6 @@ import (
 	"fox-audio/shared"
 )
 
-// type displayObj struct {
-// 	tui *display.Tui
-// }
-
 var (
 	displayHandle display.UI
 	audioServer   *audio.JackServer
@@ -92,6 +88,8 @@ func runEngine(config *model.Config, profile *model.Profile) {
 		displayHandle = display.NewJsonUI(os.Stdout)
 	}
 
+	reaper.SetPanicHandler(displayHandle.HandlePanic)
+
 	displayHandle.Initalize()
 	displayHandle.SetTransportStatus(display.StatusStarting)
 	displayHandle.Start()
@@ -101,7 +99,7 @@ func runEngine(config *model.Config, profile *model.Profile) {
 	reaper.Callback("stats", func() { statsShutdownChan <- true })
 
 	// TODO: wait for user confirmation on error
-	// TODO: make this configurable
+	// TODO: make this show a session summary instead
 	reaper.Callback("wait", func() { time.Sleep(3 * time.Second) })
 
 	shared.CatchSigint(func() {
@@ -174,6 +172,7 @@ func doShutdown() {
 func uiSetupOutputFiles() {
 	uiOutputFiles := make([]model.UiOutputFile, len(outputFiles))
 	for ofIndex, outputFile := range outputFiles {
+
 		ports := make([]string, len(outputFile.InputPorts))
 		for pIndex, port := range outputFile.InputPorts {
 			ports[pIndex] = strings.Split(port.GetJackPort().GetName(), "_")[1]

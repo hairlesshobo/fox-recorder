@@ -34,6 +34,8 @@ func startSimulation(simulationOptions *model.SimulationOptions) {
 	reaper.Register("simulation")
 
 	go func() {
+		defer reaper.HandlePanic()
+
 		t := time.NewTicker(150 * time.Millisecond)
 		levels := make([]model.SignalLevel, simulationOptions.ChannelCount)
 

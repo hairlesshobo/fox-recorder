@@ -52,4 +52,5 @@ type UI interface {
 	SetBufferUtilization(percent int)
 	SetDiskLoad(percent int)
 	SetCycleBuffer(percent int)
+	HandlePanic()
 }

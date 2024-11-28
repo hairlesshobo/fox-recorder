@@ -25,6 +25,7 @@ package shared
 import (
 	"bufio"
 	"fmt"
+	"fox-audio/reaper"
 	"log/slog"
 	"os"
 	"time"
@@ -118,6 +119,8 @@ func slogLogger(level LogLevel, message string) {
 }
 
 func logProcessor(pipe *os.File, level LogLevel) {
+	defer reaper.HandlePanic()
+
 	scanner := bufio.NewScanner(pipe)
 
 	for scanner.Scan() {

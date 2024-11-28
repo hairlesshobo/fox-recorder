@@ -24,8 +24,12 @@ package main
 
 import (
 	"fox-audio/app"
+	"fox-audio/reaper"
 )
 
 func main() {
+	defer reaper.HandlePanic()
+	defer reaper.Reap()
+
 	app.Execute()
 }

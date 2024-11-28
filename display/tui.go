@@ -131,7 +131,7 @@ func NewTui() *Tui {
 
 func (tui *Tui) Initalize() {
 	tui.app = cview.NewApplication()
-	defer tui.app.HandlePanic()
+	defer tui.HandlePanic()
 
 	meterRowHeight := len(meterSteps) + 2
 
@@ -227,7 +227,7 @@ func (tui *Tui) Start() {
 	reaper.Register("tui")
 
 	go func() {
-		defer tui.app.HandlePanic()
+		defer tui.HandlePanic()
 
 		// Capture user input
 		tui.app.SetInputCapture(tui.eventHandler)
@@ -259,6 +259,16 @@ func (tui *Tui) WaitForShutdown() {
 	<-tui.shutdownChannel
 }
 
+func (tui *Tui) HandlePanic() {
+	defer tui.app.HandlePanic()
+
+	r := recover()
+
+	if r != nil {
+		panic(r)
+	}
+}
+
 //
 // private functions
 //
@@ -268,7 +278,7 @@ func (tui *Tui) eventHandler(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyEsc:
 	case tcell.KeyCtrlC:
-		go reaper.Reap()
+		reaper.Reap()
 		return nil
 	}
 
@@ -276,7 +286,7 @@ func (tui *Tui) eventHandler(event *tcell.EventKey) *tcell.EventKey {
 }
 
 func (tui *Tui) excecuteLoop() {
-	defer tui.app.HandlePanic()
+	defer tui.HandlePanic()
 
 	slog.Debug("TUI loop started")
 
@@ -418,7 +428,9 @@ func (tui *Tui) SetOutputFiles(outputFiles []model.UiOutputFile) {
 
 func (tui *Tui) UpdateOutputFileSizes(sizes []uint64) {
 	for i, size := range sizes {
-		tui.elementOutputFiles[i].SetSize(size)
+		if len(tui.elementOutputFiles) > i {
+			tui.elementOutputFiles[i].SetSize(size)
+		}
 	}
 }
 

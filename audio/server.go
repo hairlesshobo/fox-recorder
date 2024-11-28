@@ -128,6 +128,8 @@ func (server *JackServer) StartServer() error {
 	reaper.Register("jack server")
 
 	go func() {
+		defer reaper.HandlePanic()
+
 		err = server.cmd.Run()
 		if err != nil {
 			if !strings.Contains(err.Error(), "signal: killed") &&
@@ -141,6 +143,8 @@ func (server *JackServer) StartServer() error {
 
 	// stdout processor
 	go func() {
+		defer reaper.HandlePanic()
+
 		scanner := bufio.NewScanner(jackdStdout)
 		for scanner.Scan() {
 			// not using reaper.Reaped() here because this should end on its own once the jack server is killed
@@ -166,6 +170,8 @@ func (server *JackServer) StartServer() error {
 
 	// stderr processor
 	go func() {
+		defer reaper.HandlePanic()
+
 		scanner := bufio.NewScanner(jackdStderr)
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -280,6 +286,10 @@ func (server *JackServer) PrepareOutputFiles() {
 						reaper.Reap()
 						return
 					}
+				} else {
+					slog.Error(fmt.Sprintf("Input port '%d' specified by '%s' channel does not exist", channelPort, outputFile.ChannelName))
+					reaper.Reap()
+					return
 				}
 			}
 
