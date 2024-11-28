@@ -117,7 +117,6 @@ func (j *JsonUI) excecuteLoop() {
 	for {
 		if len(j.shutdownChannel) > 0 {
 			slog.Info("JSON UI shutting down")
-			// TODO: issue shutdown signal...?
 			break
 		}
 

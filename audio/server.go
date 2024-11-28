@@ -96,13 +96,17 @@ func (server *JackServer) StartServer() error {
 	readyChan := make(chan bool)
 	// errorChan := make(chan bool)
 
-	slog.Info("Starting JACK server...")
-	// TODO: allow to specify jack binary in config
-	// TODO: dynamically find jackd binary
-	server.cmd = exec.Command("/usr/local/bin/jackd")
+	if !util.FileExists(server.config.JackdBinary) {
+		return errors.New("unable to find jackd binary")
+	}
 
-	// TODO: add this to config
-	// server.cmd.Args = append(server.cmd.Args, "-v")
+	slog.Info("Starting JACK server...")
+	server.cmd = exec.Command(server.config.JackdBinary)
+
+	if server.config.VerboseJackServer {
+		server.cmd.Args = append(server.cmd.Args, "-v")
+	}
+
 	server.cmd.Args = append(server.cmd.Args, fmt.Sprintf("-d%s", server.driver))
 
 	if server.device != "" {
@@ -114,14 +118,12 @@ func (server *JackServer) StartServer() error {
 
 	jackdStdout, err := server.cmd.StdoutPipe()
 	if err != nil {
-		slog.Error("Error occurred connecting stdout for 'jackd' command: " + err.Error())
-		return err
+		return errors.New("error occurred connecting stdout for 'jackd' command: " + err.Error())
 	}
 
 	jackdStderr, err := server.cmd.StderrPipe()
 	if err != nil {
-		slog.Error("Error occurred connecting stdout for 'jackd' command: " + err.Error())
-		return err
+		return errors.New("error occurred connecting stdout for 'jackd' command: " + err.Error())
 	}
 
 	reaper.Register("jack server")

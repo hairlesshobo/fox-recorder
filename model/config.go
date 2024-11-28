@@ -41,6 +41,8 @@ type CommandLineArgs struct {
 }
 
 type Config struct {
+	JackdBinary                  string     `yaml:"jackd_binary,omitempty"`
+	VerboseJackServer            bool       `yaml:"verbose_jack_server,omitempty"`
 	JackClientName               string     `yaml:"jack_client_name,omitempty"`
 	ProfileDirectory             string     `yaml:"profile_directory,omitempty"`
 	LogLevel                     int        `yaml:"log_level,omitempty"`

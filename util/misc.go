@@ -187,3 +187,18 @@ func FormatDuration(duration float64) string {
 
 	return fmt.Sprintf("%02d:%02d:%02d.%03d", hours, minutes, seconds, mseconds)
 }
+
+func FindJackdBinary() string {
+	possiblePaths := []string{
+		"/usr/bin/jackd",
+		"/usr/local/bin/jackd",
+	}
+
+	for _, path := range possiblePaths {
+		if FileExists(path) {
+			return path
+		}
+	}
+
+	return ""
+}

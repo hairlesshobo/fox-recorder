@@ -63,6 +63,8 @@ func ReadConfig(args *model.CommandLineArgs) *model.Config {
 	}
 
 	config := &model.Config{
+		JackdBinary:                  "",
+		VerboseJackServer:            false,
 		JackClientName:               "fox",
 		ProfileDirectory:             "",
 		LogLevel:                     int(slog.LevelInfo),
@@ -77,8 +79,11 @@ func ReadConfig(args *model.CommandLineArgs) *model.Config {
 
 	ReadYamlFile(config, args.ConfigFile)
 
-	requestedOutputType := model.OutputTypeMap[args.OutputType]
+	if config.JackdBinary == "" {
+		config.JackdBinary = FindJackdBinary()
+	}
 
+	requestedOutputType := model.OutputTypeMap[args.OutputType]
 	if requestedOutputType != config.OutputType {
 		config.OutputType = requestedOutputType
 	}
