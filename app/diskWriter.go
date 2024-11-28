@@ -103,26 +103,26 @@ func writeCycle(profile *model.Profile, finish bool) bool {
 					return false
 				}
 
-				for _, writeBuffer := range writeBuffers {
-					//
-					// new version
-					//
-					buf := &audio.IntBuffer{
-						Data: make([]int, samplesToRead),
-						Format: &audio.Format{
-							NumChannels: int(outputFile.ChannelCount),
-							SampleRate:  int(outputFile.SampleRate),
-						},
-					}
-
-					// for each sample we load, scale and cast to int
-					for i := 0; i < samplesToRead; i++ {
-						buf.Data[i] = int(<-writeBuffer * factor)
-					}
-
-					// TODO: add interleave support
-					outputFile.Write(buf)
+				// allocate the encoder buffer
+				buf := &audio.IntBuffer{
+					Data: make([]int, samplesToRead*outputFile.ChannelCount),
+					Format: &audio.Format{
+						NumChannels: int(outputFile.ChannelCount),
+						SampleRate:  int(outputFile.SampleRate),
+					},
 				}
+
+				bufferIndex := 0
+
+				// loop through the samples, then the channel buffers in order to interleave the output
+				for sampleIndex := 0; sampleIndex < samplesToRead*outputFile.ChannelCount; sampleIndex += outputFile.ChannelCount {
+					for bufferIndex = 0; bufferIndex < outputFile.ChannelCount; bufferIndex++ {
+						// for each sample we load, scale and cast to int
+						buf.Data[sampleIndex+bufferIndex] = int(<-writeBuffers[bufferIndex] * factor)
+					}
+				}
+
+				outputFile.Write(buf)
 
 				if finish {
 					outputFile.Close()
