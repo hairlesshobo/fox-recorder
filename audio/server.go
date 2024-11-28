@@ -416,8 +416,7 @@ func (server *JackServer) Disconnect() {
 		jackStatus := server.jackClient.Close()
 
 		if jackStatus != 0 {
-			slog.Error(fmt.Sprintf("JACK Status: %s", jack.StrError(jackStatus)))
-			return
+			slog.Warn(fmt.Sprintf("JACK Status: %s", jack.StrError(jackStatus)))
 		}
 
 		server.clientConnected = false

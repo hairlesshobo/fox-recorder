@@ -56,6 +56,8 @@ func jackInfo(message string) {
 
 func jackShutdown() {
 	slog.Info("JACK client: connection is shutting down")
+	transportRecord = false
+	reaper.Reap()
 }
 
 func jackXrun() int {

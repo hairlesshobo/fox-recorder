@@ -25,6 +25,7 @@ package reaper
 import (
 	"log/slog"
 	"slices"
+	"strings"
 	"sync"
 )
 
@@ -55,13 +56,16 @@ func Reap() {
 	if len(reapRequested) == 0 {
 		reapRequested <- true
 
-		callbacksReversed := slices.Clone(reaperCallbacks)
-		slices.Reverse(callbacksReversed)
+		go func() {
+			callbacksReversed := slices.Clone(reaperCallbacks)
+			slices.Reverse(callbacksReversed)
 
-		for _, callback := range callbacksReversed {
-			slog.Debug("reaper: calling reap callback for '" + callback.name + "'")
-			callback.callbackFunc()
-		}
+			for _, callback := range callbacksReversed {
+				slog.Debug("reaper: calling reap callback for '" + callback.name + "'")
+				callback.callbackFunc()
+				slog.Debug("reaper: Remaining registrations: %s\n", strings.Join(reaperRegistrations, ", "))
+			}
+		}()
 	}
 }
 
