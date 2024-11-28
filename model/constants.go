@@ -22,8 +22,10 @@
 // =================================================================================
 package model
 
-type SimulationOptions struct {
-	EnableSimulation bool
-	FreezeMeters     bool
-	ChannelCount     int
-}
+var (
+	OutputTypeMap = map[string]OutputType{
+		"tui":  OutputTUI,
+		"json": OutputJSON,
+		// "text": OutputText,
+	}
+)

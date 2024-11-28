@@ -27,13 +27,31 @@ type OutputType int
 const (
 	OutputTUI OutputType = iota
 	OutputJSON
-	OutputText
+	// OutputText
 )
 
+type CommandLineArgs struct {
+	Simulate             bool
+	SimulateChannelCount int
+	SimulateFreezeMeters bool
+
+	ProfileName string
+	ConfigFile  string
+	OutputType  string
+}
+
 type Config struct {
-	JackClientName               string
-	ProfileDirectory             string
-	LogLevel                     int
-	HardwarePortConnectionPrefix string
-	OutputType                   OutputType
+	JackClientName               string     `yaml:"jack_client_name,omitempty"`
+	ProfileDirectory             string     `yaml:"profile_directory,omitempty"`
+	LogLevel                     int        `yaml:"log_level,omitempty"`
+	HardwarePortConnectionPrefix string     `yaml:"hardware_port_connection_prefix,omitempty"`
+	OutputType                   OutputType `yaml:"output_Type,omitempty"`
+
+	SimulationOptions *SimulationOptions `yaml:"simulation_options"`
+}
+
+type SimulationOptions struct {
+	EnableSimulation bool `yaml:"enable,omitempty"`
+	FreezeMeters     bool `yaml:"freeze_meters,omitempty"`
+	ChannelCount     int  `yaml:"channel_count,omitempty"`
 }

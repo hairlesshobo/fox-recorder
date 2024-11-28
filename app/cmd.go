@@ -25,8 +25,6 @@ package app
 import (
 	"log/slog"
 	"os"
-	"slices"
-	"strings"
 
 	"fox-audio/model"
 	"fox-audio/util"
@@ -36,17 +34,7 @@ import (
 
 var (
 	// arguments
-	argSimulate             bool
-	argSimulateChannelCount int
-	argSimulateFreezeMeters bool
-	argProfileName          string
-	argOutputType           string
-
-	outputTypeMap = map[string]model.OutputType{
-		"tui":  model.OutputTUI,
-		"json": model.OutputJSON,
-		"text": model.OutputText,
-	}
+	cliArgs = model.CommandLineArgs{}
 
 	rootCmd = &cobra.Command{
 		Use:   "record",
@@ -56,47 +44,29 @@ var (
 			// util.DumpRunes(10500, 200)
 			// return
 
-			if !slices.Contains([]string{"json", "tui"}, strings.ToLower(argOutputType)) {
-				slog.Error("Invalid output type specified: " + argOutputType)
-				os.Exit(1)
-			}
-
-			if argProfileName == "" {
+			if cliArgs.ProfileName == "" {
 				slog.Error("Profile not specified but is REQUIRED. See fox --help for more info")
 				os.Exit(1)
 			}
 
-			profile := util.ReadProfile(argProfileName)
+			profile := util.ReadProfile(cliArgs.ProfileName)
+			config := util.ReadConfig(&cliArgs)
 
-			// TODO: read config file here
-			config := &model.Config{
-				JackClientName:               "fox",
-				ProfileDirectory:             "",
-				LogLevel:                     int(slog.LevelInfo),
-				OutputType:                   outputTypeMap[argOutputType],
-				HardwarePortConnectionPrefix: "system:capture_", //"multiplier:out",
-			}
-
-			simulationOptins := &model.SimulationOptions{
-				EnableSimulation: argSimulate,
-				FreezeMeters:     argSimulateFreezeMeters,
-				ChannelCount:     argSimulateChannelCount,
-			}
-
-			runEngine(config, profile, simulationOptins)
+			runEngine(config, profile)
 		},
 	}
 )
 
 func init() {
 	// ui test commands
-	rootCmd.Flags().BoolVar(&argSimulate, "simulate", false, "Freeze the meters (don't randomly set level)")
-	rootCmd.Flags().BoolVar(&argSimulateFreezeMeters, "simulate-freeze-meters", false, "Freeze the meters (don't randomly set level)")
-	rootCmd.Flags().IntVar(&argSimulateChannelCount, "simulate-channel-count", 32, "Mumber of channels to simulate in UI test")
+	rootCmd.Flags().BoolVar(&cliArgs.Simulate, "simulate", false, "Freeze the meters (don't randomly set level)")
+	rootCmd.Flags().BoolVar(&cliArgs.SimulateFreezeMeters, "simulate-freeze-meters", false, "Freeze the meters (don't randomly set level)")
+	rootCmd.Flags().IntVar(&cliArgs.SimulateChannelCount, "simulate-channel-count", 32, "Mumber of channels to simulate in UI test")
 
-	rootCmd.Flags().StringVarP(&argProfileName, "profile", "p", "default", "Name or path of the profile to load")
+	rootCmd.Flags().StringVarP(&cliArgs.ProfileName, "profile", "p", "default", "Name or path of the profile to load")
+	rootCmd.Flags().StringVarP(&cliArgs.ConfigFile, "config", "c", "fox.config", "Name or path of the config file to load")
 
-	rootCmd.Flags().StringVar(&argOutputType, "output-type", "tui", "Output type (valid options: json, tui)")
+	rootCmd.Flags().StringVar(&cliArgs.OutputType, "output-type", "tui", "Output type (valid options: json, tui)")
 
 	// TODO: implement empty file auto deletion
 }

@@ -65,11 +65,11 @@ var (
 		-30, -36, -42, -48, -54, -60}
 
 	levelColors = map[int]tcell.Color{
-		0:    theme.Red,       // 124?
-		-2:   theme.Pink,      // 124?
-		-6:   theme.Yellow,    // 131?
-		-18:  theme.Green,     // 142? 65? muted 71?
-		-150: theme.SoftGreen, //tcell.Color120, 59? 60? 61? 66? 67? 68? 72?
+		0:    theme.Red,
+		-2:   theme.Pink,
+		-6:   theme.Yellow,
+		-18:  theme.Green,
+		-150: theme.SoftGreen,
 	}
 )
 
@@ -437,11 +437,9 @@ func (tui *Tui) SetChannelCount(channelCount int) {
 	meterStepLabel := cview.NewTextView()
 	meterStepLabel.SetPadding(0, 0, 0, 0)
 
-	// meterStepLabels := make([]string, len(meterSteps))
 	meterStepLabel.Write([]byte(fmt.Sprintln()))
 	for step := 0; step < len(meterSteps); step++ {
 		meterStepLabel.Write([]byte(fmt.Sprintf("%3v\n", fmt.Sprintf("%d", meterSteps[step]))))
-		// meterStepLabels = append(meterStepLabels, fmt.Sprintf("%3v", fmt.Sprintf("%d", meterSteps[step])))
 	}
 	tui.gridLevelMeters.AddItem(meterStepLabel, 0, 0, 1, 1, 0, 0, false)
 

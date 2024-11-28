@@ -85,7 +85,7 @@ func ConfigureUiLogger() {
 	shared.EnableSlogLogging()
 }
 
-func runEngine(config *model.Config, profile *model.Profile, simulationOptions *model.SimulationOptions) {
+func runEngine(config *model.Config, profile *model.Profile) {
 	if config.OutputType == model.OutputTUI {
 		displayHandle = display.NewTui()
 	} else if config.OutputType == model.OutputJSON {
@@ -101,7 +101,8 @@ func runEngine(config *model.Config, profile *model.Profile, simulationOptions *
 	reaper.Callback("stats", func() { statsShutdownChan <- true })
 
 	// TODO: wait for user confirmation on error
-	reaper.Callback("wait", func() { time.Sleep(6 * time.Second) })
+	// TODO: make this configurable
+	reaper.Callback("wait", func() { time.Sleep(3 * time.Second) })
 
 	shared.CatchSigint(func() {
 		slog.Info("Caught sigint, calling reaper")
@@ -112,7 +113,7 @@ func runEngine(config *model.Config, profile *model.Profile, simulationOptions *
 	ConfigureUiLogger()
 	// ConfigureFileLogger()
 
-	if !simulationOptions.EnableSimulation {
+	if !config.SimulationOptions.EnableSimulation {
 		audioServer = audio.NewServer(config, profile, jackInfo, jackError)
 
 		jackRunning := getJackServer(profile)
@@ -148,9 +149,9 @@ func runEngine(config *model.Config, profile *model.Profile, simulationOptions *
 	}
 
 	// this blocks until the jack connection shuts down
-	if simulationOptions.EnableSimulation {
-		displayHandle.SetChannelCount(simulationOptions.ChannelCount)
-		startSimulation(simulationOptions)
+	if config.SimulationOptions.EnableSimulation {
+		displayHandle.SetChannelCount(config.SimulationOptions.ChannelCount)
+		startSimulation(config.SimulationOptions)
 	}
 
 	reaper.Callback("shutdown status", doShutdown)

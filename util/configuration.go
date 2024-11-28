@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -45,6 +46,56 @@ func ReadProfile(profilePath string) *model.Profile {
 	prepareOutputDirectory(profile)
 
 	return profile
+}
+
+func ReadConfig(args *model.CommandLineArgs) *model.Config {
+	outputTypes := make([]string, len(model.OutputTypeMap))
+
+	i := 0
+	for key := range model.OutputTypeMap {
+		outputTypes[i] = strings.ToLower(key)
+		i++
+	}
+
+	if !slices.Contains(outputTypes, strings.ToLower(args.OutputType)) {
+		slog.Error("Invalid output type specified: " + args.OutputType + ". Valid options: " + strings.Join(outputTypes, ", "))
+		os.Exit(1)
+	}
+
+	config := &model.Config{
+		JackClientName:               "fox",
+		ProfileDirectory:             "",
+		LogLevel:                     int(slog.LevelInfo),
+		OutputType:                   model.OutputTUI,
+		HardwarePortConnectionPrefix: "system:capture_", //"multiplier:out",
+		SimulationOptions: &model.SimulationOptions{
+			EnableSimulation: false,
+			FreezeMeters:     false,
+			ChannelCount:     32,
+		},
+	}
+
+	ReadYamlFile(config, args.ConfigFile)
+
+	requestedOutputType := model.OutputTypeMap[args.OutputType]
+
+	if requestedOutputType != config.OutputType {
+		config.OutputType = requestedOutputType
+	}
+
+	if args.Simulate != config.SimulationOptions.EnableSimulation {
+		config.SimulationOptions.EnableSimulation = args.Simulate
+	}
+
+	if args.SimulateChannelCount != config.SimulationOptions.ChannelCount {
+		config.SimulationOptions.ChannelCount = args.SimulateChannelCount
+	}
+
+	if args.SimulateFreezeMeters != config.SimulationOptions.FreezeMeters {
+		config.SimulationOptions.FreezeMeters = args.SimulateFreezeMeters
+	}
+
+	return config
 }
 
 func prepareOutputDirectory(profile *model.Profile) {
