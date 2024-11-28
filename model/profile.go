@@ -30,10 +30,10 @@ type Profile struct {
 }
 
 type ProfileAudioServer struct {
-	AutoStart       bool     `yaml:"auto_start"`
-	Interface       []string `yaml:"interface"`
-	SampleRate      int      `yaml:"sample_rate"`
-	FramesPerPeriod int      `yaml:"frames_per_period"`
+	AutoStart       bool   `yaml:"auto_start"`
+	Interface       string `yaml:"interface"`
+	SampleRate      int    `yaml:"sample_rate"`
+	FramesPerPeriod int    `yaml:"frames_per_period"`
 }
 
 type ProfileChannel struct {

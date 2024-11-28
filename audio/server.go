@@ -65,14 +65,13 @@ type JackServer struct {
 }
 
 func NewServer(config *model.Config, profile *model.Profile, infoCallback func(string), errorCallback func(string)) *JackServer {
-	audioInterfaceParts := strings.Split(profile.AudioServer.Interface[0], "/")
+	audioInterfaceParts := strings.Split(profile.AudioServer.Interface, "/")
 
-	// TODO: add support for trying multiple audio interfaces
 	server := JackServer{
 		config:  config,
 		profile: profile,
 
-		audioInterface:  profile.AudioServer.Interface[0],
+		audioInterface:  profile.AudioServer.Interface,
 		sampleRate:      profile.AudioServer.SampleRate,
 		framesPerPeriod: profile.AudioServer.FramesPerPeriod,
 
