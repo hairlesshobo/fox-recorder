@@ -2,3 +2,5 @@ fox-recorder
 fox
 *.log
 *.wav
+*.profile
+*.config
