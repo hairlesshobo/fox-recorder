@@ -23,6 +23,7 @@
 package reaper
 
 import (
+	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
@@ -63,7 +64,7 @@ func Reap() {
 			for _, callback := range callbacksReversed {
 				slog.Debug("reaper: calling reap callback for '" + callback.name + "'")
 				callback.callbackFunc()
-				slog.Debug("reaper: Remaining registrations: %s\n", strings.Join(reaperRegistrations, ", "))
+				slog.Debug(fmt.Sprintf("reaper: Remaining registrations: %s", strings.Join(reaperRegistrations, ", ")))
 			}
 		}()
 	}

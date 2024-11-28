@@ -198,7 +198,7 @@ func (server *JackServer) StartServer() error {
 	}
 }
 
-func (server *JackServer) Connect(processCallback jack.ProcessCallback, xrunCallback jack.XRunCallback, shutdownCallback jack.ShutdownCallback) {
+func (server *JackServer) Connect(processCallback jack.ProcessCallback, xrunCallback jack.XRunCallback, shutdownCallback jack.ShutdownCallback) bool {
 	reaper.Register("jack client")
 
 	slog.Info("Connecting to JACK server")
@@ -207,8 +207,9 @@ func (server *JackServer) Connect(processCallback jack.ProcessCallback, xrunCall
 	server.jackClient, jackStatus = jack.ClientOpen(server.config.JackClientName, jack.NoStartServer)
 
 	if jackStatus != 0 {
-		slog.Error(fmt.Sprintf("JACK Status: %s", jack.StrError(jackStatus)))
-		return
+		slog.Error(fmt.Sprintf("JACK Status: %d / %s", jackStatus, jack.StrError(jackStatus)))
+		reaper.Done("jack client")
+		return false
 	}
 
 	server.clientConnected = true
@@ -220,6 +221,8 @@ func (server *JackServer) Connect(processCallback jack.ProcessCallback, xrunCall
 	server.SetProcessCallback(processCallback)
 	server.SetXrunCallback(xrunCallback)
 	server.SetShutdownCallback(shutdownCallback)
+
+	return true
 }
 
 func (server *JackServer) PrepareOutputFiles() {

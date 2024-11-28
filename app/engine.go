@@ -121,30 +121,36 @@ func runEngine(config *model.Config, profile *model.Profile) {
 		if jackRunning {
 			displayHandle.SetTransportStatus(display.StatusPaused)
 
-			audioServer.Connect(jackProcess, jackXrun, jackShutdown)
-			reaper.Callback("disconnect jack server", audioServer.Disconnect)
+			connected := audioServer.Connect(jackProcess, jackXrun, jackShutdown)
 
-			setupCycleBuffer(profile)
+			if !connected {
+				slog.Error("Failed to connect to JACK server")
+				reaper.Reap()
+			} else {
+				reaper.Callback("disconnect jack server", audioServer.Disconnect)
 
-			// only register input ports, for now
-			audioServer.RegisterPorts(true, false)
+				setupCycleBuffer(profile)
 
-			audioServer.PrepareOutputFiles()
-			outputFiles = audioServer.GetOutputFiles()
-			uiSetupOutputFiles()
+				// only register input ports, for now
+				audioServer.RegisterPorts(true, false)
 
-			ports = audioServer.GetInputPorts()
-			uiSetupLevelMeters()
+				audioServer.PrepareOutputFiles()
+				outputFiles = audioServer.GetOutputFiles()
+				uiSetupOutputFiles()
 
-			audioServer.ActivateClient()
+				ports = audioServer.GetInputPorts()
+				uiSetupLevelMeters()
 
-			startDiskWriter(profile)
+				audioServer.ActivateClient()
 
-			audioServer.ConnectPorts(true, false)
+				startDiskWriter(profile)
 
-			uiSetOuputFormat(profile)
+				audioServer.ConnectPorts(true, false)
 
-			transportRecord = true
+				uiSetOuputFormat(profile)
+
+				transportRecord = true
+			}
 		}
 	}
 
@@ -221,8 +227,6 @@ func getJackServer(profile *model.Profile) bool {
 		} else {
 			reaper.Callback("stop jack server", audioServer.StopServer)
 		}
-	} else {
-		// TODO: make sure jackd is running prior to startup
 	}
 
 	return jackRunning
