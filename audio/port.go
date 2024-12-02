@@ -57,6 +57,10 @@ func (port *Port) setJackPort(jackPort *jack.Port) {
 }
 
 func (port *Port) GetJackPort() *jack.Port {
+	if port == nil {
+		return nil
+	}
+
 	return port.jackPort
 }
 

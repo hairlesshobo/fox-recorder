@@ -90,8 +90,10 @@ func initStatistics(profile *model.Profile) chan bool {
 
 		outputFileSizes := make([]uint64, len(outputFiles))
 		for i, outputFile := range outputFiles {
-			outputFileSizes[i] = uint64(outputFile.Encoder.WrittenBytes)
-			usedBytes += uint64(outputFile.Encoder.WrittenBytes)
+			if outputFile.Encoder != nil {
+				outputFileSizes[i] = uint64(outputFile.Encoder.WrittenBytes)
+				usedBytes += uint64(outputFile.Encoder.WrittenBytes)
+			}
 		}
 
 		displayHandle.UpdateOutputFileSizes(outputFileSizes)

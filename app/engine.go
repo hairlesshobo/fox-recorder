@@ -175,7 +175,11 @@ func uiSetupOutputFiles() {
 
 		ports := make([]string, len(outputFile.InputPorts))
 		for pIndex, port := range outputFile.InputPorts {
-			ports[pIndex] = strings.Split(port.GetJackPort().GetName(), "_")[1]
+			jackPort := port.GetJackPort()
+
+			if port != nil {
+				ports[pIndex] = strings.Split(jackPort.GetName(), "_")[1]
+			}
 		}
 
 		uiOutputFiles[ofIndex] = model.UiOutputFile{
