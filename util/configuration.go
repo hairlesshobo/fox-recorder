@@ -23,6 +23,7 @@
 package util
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -34,21 +35,23 @@ import (
 	"fox-audio/reaper"
 )
 
-func ReadProfile(profilePath string) *model.Profile {
+func ReadProfile(profilePath string) (*model.Profile, error) {
 	if !strings.HasSuffix(profilePath, ".profile") {
 		profilePath += ".profile"
 	}
 
 	profile := &model.Profile{}
 
-	ReadYamlFile(profile, profilePath)
+	if err := ReadYamlFile(profile, profilePath); err != nil {
+		return nil, err
+	}
 
 	prepareOutputDirectory(profile)
 
-	return profile
+	return profile, nil
 }
 
-func ReadConfig(args *model.CommandLineArgs) *model.Config {
+func ReadConfig(args *model.CommandLineArgs) (*model.Config, error) {
 	outputTypes := make([]string, len(model.OutputTypeMap))
 
 	i := 0
@@ -58,8 +61,8 @@ func ReadConfig(args *model.CommandLineArgs) *model.Config {
 	}
 
 	if !slices.Contains(outputTypes, strings.ToLower(args.OutputType)) {
-		slog.Error("Invalid output type specified: " + args.OutputType + ". Valid options: " + strings.Join(outputTypes, ", "))
-		os.Exit(1)
+		err := errors.New("invalid output type specified: " + args.OutputType + ". Valid options: " + strings.Join(outputTypes, ", "))
+		return nil, err
 	}
 
 	config := &model.Config{
@@ -77,7 +80,9 @@ func ReadConfig(args *model.CommandLineArgs) *model.Config {
 		},
 	}
 
-	ReadYamlFile(config, args.ConfigFile)
+	if err := ReadYamlFile(config, args.ConfigFile); err != nil {
+		return nil, err
+	}
 
 	if config.JackdBinary == "" {
 		config.JackdBinary = FindJackdBinary()
@@ -100,7 +105,7 @@ func ReadConfig(args *model.CommandLineArgs) *model.Config {
 		config.SimulationOptions.FreezeMeters = args.SimulateFreezeMeters
 	}
 
-	return config
+	return config, nil
 }
 
 func prepareOutputDirectory(profile *model.Profile) {

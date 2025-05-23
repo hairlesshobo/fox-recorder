@@ -23,6 +23,7 @@
 package app
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -49,8 +50,17 @@ var (
 				os.Exit(1)
 			}
 
-			profile := util.ReadProfile(cliArgs.ProfileName)
-			config := util.ReadConfig(&cliArgs)
+			config, err := util.ReadConfig(&cliArgs)
+			if err != nil {
+				slog.Error(fmt.Sprintf("failed to read config: %v", err))
+				os.Exit(1)
+			}
+
+			profile, err := util.ReadProfile(cliArgs.ProfileName)
+			if err != nil {
+				slog.Error(fmt.Sprintf("failed to read profile: %v", err))
+				os.Exit(1)
+			}
 
 			runEngine(config, profile)
 		},

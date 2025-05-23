@@ -93,6 +93,7 @@ func ReadYamlFile(cfg interface{}, fileName string) error {
 			}
 
 		} else {
+			// check path where ececutable lives
 			binPath, _ := os.Executable()
 			binDir := filepath.Dir(binPath)
 			sidecarPath := path.Join(binDir, fileName)
@@ -101,16 +102,26 @@ func ReadYamlFile(cfg interface{}, fileName string) error {
 				filePath = sidecarPath
 
 			} else {
-				homeDir, err := os.UserHomeDir()
-				if err != nil {
-					slog.Error("could not find user home dir: " + err.Error())
-					return err
-				}
+				// check working directory
+				cwd, _ := os.Getwd()
+				cwdSidecarPath := path.Join(cwd, fileName)
 
-				homeDotConfigPath := path.Join(homeDir, ".config", "fox", fileName)
+				if FileExists(cwdSidecarPath) {
+					filePath = cwdSidecarPath
 
-				if FileExists(homeDotConfigPath) {
-					filePath = homeDotConfigPath
+				} else {
+					// check user config directory
+					homeDir, err := os.UserHomeDir()
+					if err != nil {
+						slog.Error("could not find user home dir: " + err.Error())
+						return err
+					}
+
+					homeDotConfigPath := path.Join(homeDir, ".config", "fox", fileName)
+
+					if FileExists(homeDotConfigPath) {
+						filePath = homeDotConfigPath
+					}
 				}
 			}
 		}
@@ -118,13 +129,13 @@ func ReadYamlFile(cfg interface{}, fileName string) error {
 
 	if filePath == "" {
 		err := errors.New("no yaml file found")
-		slog.Error(err.Error())
+		// slog.Error(err.Error())
 		return err
 	}
 
 	if !FileExists(filePath) {
 		err := errors.New("the specified yaml file does not exist: " + filePath)
-		slog.Error(err.Error())
+		// slog.Error(err.Error())
 		return err
 	}
 
