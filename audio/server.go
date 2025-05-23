@@ -42,6 +42,10 @@ import (
 	"github.com/hairlesshobo/go-jack"
 )
 
+var (
+	disconnectLineTimeoutMs = 1000
+)
+
 type JackServer struct {
 	config  *model.Config
 	profile *model.Profile
@@ -60,6 +64,11 @@ type JackServer struct {
 	clientConnected bool
 	shutdownMutex   sync.Mutex
 	serverExited    bool
+
+	// used for tracking (dis)connection of audio devices
+	serverRunning   bool
+	lastLogLine     time.Time
+	disconnectTimer time.Timer
 
 	cmd *exec.Cmd
 }
@@ -141,7 +150,6 @@ func (server *JackServer) StartServer() error {
 		reaper.Done("jack server")
 	}()
 
-	// stdout processor
 	go func() {
 		defer reaper.HandlePanic()
 
@@ -159,12 +167,34 @@ func (server *JackServer) StartServer() error {
 				strings.HasPrefix(line, "self-connect-mode is") {
 				util.TraceLog("jackd: " + line)
 			} else {
+				// this seems to be the indication that a device was connected or disconnected. We
+				// need to trigger a timer and begint to scan the incoming lines to see if our configured
+				// device exists in the list
+				if server.serverRunning && strings.HasPrefix(line, "Device ID =") {
+					if server.disconnectTimer.C == nil {
+						server.disconnectTimer = *time.NewTimer(time.Duration(disconnectLineTimeoutMs) * time.Millisecond)
+						// hardware disconnect callback
+						go func() {
+							<-server.disconnectTimer.C
+							slog.Warn("hardware disconnected")
+							server.StopServer()
+						}()
+
+						// we found the device - so we stop the tiemr
+						if strings.Contains(line, server.device) {
+							server.disconnectTimer.Stop()
+						}
+					}
+				}
 				slog.Info("jackd: " + line)
 			}
 
 			if strings.Contains(line, "driver is running...") {
 				readyChan <- true
+				server.serverRunning = true
 			}
+
+			server.lastLogLine = time.Now()
 		}
 	}()
 
