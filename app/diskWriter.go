@@ -28,11 +28,12 @@ import (
 	"math"
 	"time"
 
+	"fox-audio/audio"
 	"fox-audio/model"
 	"fox-audio/reaper"
 	"fox-audio/util"
 
-	"github.com/go-audio/audio"
+	jackAudio "github.com/go-audio/audio"
 )
 
 func startDiskWriter(profile *model.Profile) {
@@ -67,6 +68,16 @@ out:
 	reaper.Done("disk writer")
 }
 
+func getFirstEnabledOutputFile() *audio.OutputFile {
+	for _, file := range outputFiles {
+		if file.Enabled {
+			return file
+		}
+	}
+
+	return nil
+}
+
 func writeCycle(profile *model.Profile, finish bool) bool {
 	requiredSamples := int(profile.Output.MinimumWriteSize * float64(profile.AudioServer.SampleRate))
 	samplesToRead := requiredSamples
@@ -74,7 +85,7 @@ func writeCycle(profile *model.Profile, finish bool) bool {
 
 	// check if enough to write
 	if finish ||
-		(len(outputFiles) > 0 && len(outputFiles[0].GetWriteBuffers()[0]) > requiredSamples) {
+		(len(outputFiles) > 0 && len(getFirstEnabledOutputFile().GetWriteBuffers()[0]) > requiredSamples) {
 
 		// disk load statistics
 		if stats.diskProcessLastEndTime > 0 {
@@ -106,9 +117,9 @@ func writeCycle(profile *model.Profile, finish bool) bool {
 				}
 
 				// allocate the encoder buffer
-				buf := &audio.IntBuffer{
+				buf := &jackAudio.IntBuffer{
 					Data: make([]int, samplesToRead*outputFile.ChannelCount),
-					Format: &audio.Format{
+					Format: &jackAudio.Format{
 						NumChannels: int(outputFile.ChannelCount),
 						SampleRate:  int(outputFile.SampleRate),
 					},
