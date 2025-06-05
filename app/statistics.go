@@ -194,7 +194,7 @@ func initStatistics(profile *model.Profile) chan bool {
 			}
 
 			// recording duration
-			duration := float64(stats.framesProcessed) / float64(profile.AudioServer.SampleRate)
+			duration := float64(stats.framesProcessed) / float64(profile.AudioServer.SampleRate) * (4096 / float64(profile.AudioServer.FramesPerPeriod))
 			displayHandle.SetDuration(duration)
 		}
 	}()

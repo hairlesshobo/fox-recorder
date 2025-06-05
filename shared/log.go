@@ -39,6 +39,7 @@ const (
 	WARN
 	INFO
 	DEBUG
+	TRACE
 )
 
 var (
@@ -57,6 +58,8 @@ func (s LogLevel) String() string {
 		return "Info"
 	case DEBUG:
 		return "Debug"
+	case TRACE:
+		return "Trace"
 	}
 	return "unknown"
 }

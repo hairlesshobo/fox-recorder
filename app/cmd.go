@@ -62,6 +62,8 @@ var (
 				os.Exit(1)
 			}
 
+			slog.Info(fmt.Sprintf("Configured log level: %d", config.LogLevel))
+
 			runEngine(config, profile)
 		},
 	}

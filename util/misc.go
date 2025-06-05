@@ -157,7 +157,7 @@ func ReadYamlFile(cfg interface{}, fileName string) error {
 }
 
 func TraceLog(message string, args ...any) {
-	slog.Log(context.Background(), slog.Level(-10), message, args...)
+	slog.Log(context.Background(), slog.Level(-8), message, args...)
 }
 
 func FormatSize(bytes uint64) string {

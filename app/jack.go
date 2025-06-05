@@ -23,6 +23,7 @@
 package app
 
 import (
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -116,7 +117,7 @@ func jackProcess(nframes uint32) int {
 							writeBuffer <- float32(sample)
 						}
 					} else {
-						slog.Error("No space left in write buffer!!")
+						slog.Error(fmt.Sprintf("%s: No space left in write buffer!!", port.GetJackPort().GetShortName()))
 					}
 				}
 			}

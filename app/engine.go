@@ -70,8 +70,8 @@ func ConfigureFileLogger() {
 	shared.EnableSlogLogging()
 }
 
-func ConfigureUiLogger() {
-	handler := shared.NewTuiLogHandler(displayHandle, slog.LevelDebug, func(message string) {
+func ConfigureUiLogger(config *model.Config) {
+	handler := shared.NewTuiLogHandler(displayHandle, slog.Level(config.LogLevel), func(message string) {
 		displayHandle.IncrementErrorCount()
 	})
 	logger := slog.New(handler)
@@ -108,7 +108,7 @@ func runEngine(config *model.Config, profile *model.Profile) {
 	})
 
 	// ConfigureTextLogger()
-	ConfigureUiLogger()
+	ConfigureUiLogger(config)
 	// ConfigureFileLogger()
 
 	if !config.SimulationOptions.EnableSimulation {
